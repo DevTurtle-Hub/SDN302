@@ -68,7 +68,6 @@ export default function HomePage() {
 
   const handleEdit = (task: TaskData) => {
     setEditingTask(task);
-    // Smoothly scroll to the top of the form
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -106,19 +105,28 @@ export default function HomePage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-      {/* Hero Header */}
-      <div className="mb-8 text-center sm:text-left">
-        <h1 className="text-3xl font-extrabold tracking-tight text-gray-900 sm:text-4xl">
-          Task &amp; Team Management
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+      {/* Hero Header with Dual Gradient */}
+      <div className="mb-10 flex flex-col items-center text-center sm:items-start sm:text-left">
+        <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-xs font-semibold text-cyan-400 mb-3 shadow-inner">
+          <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-ping" />
+          Technical Foundation &bull; Assignment 1
+        </div>
+
+        <h1 className="text-3xl font-black tracking-tight text-white sm:text-5xl">
+          Task &amp; Team{' '}
+          <span className="bg-gradient-to-r from-indigo-400 via-indigo-300 to-cyan-400 bg-clip-text text-transparent">
+            Management
+          </span>
         </h1>
-        <p className="mt-2 text-base text-gray-600">
-          Manage your tasks efficiently, collaborate seamlessly with your team, and track progress all in one place.
+
+        <p className="mt-3 max-w-2xl text-sm sm:text-base text-slate-400 leading-relaxed">
+          Orchestrate workflows with ease. Powered by Next.js App Router, Prisma ORM, and Supabase PostgreSQL.
         </p>
       </div>
 
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+      {/* Main Grid: Form on Left, Tasks on Right */}
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 items-start">
         {/* Left Column: Form */}
         <div className="lg:col-span-5">
           <div className="sticky top-24">
