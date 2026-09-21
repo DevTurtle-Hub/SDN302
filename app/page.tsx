@@ -1,69 +1,148 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useEffect, useState } from 'react';
+import TaskForm, { TaskData } from '@/components/TaskForm';
+import TaskList from '@/components/TaskList';
+
+export default function HomePage() {
+  const [tasks, setTasks] = useState<TaskData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [editingTask, setEditingTask] = useState<TaskData | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const fetchTasks = async () => {
+    try {
+      const res = await fetch('/api/tasks');
+      if (!res.ok) {
+        throw new Error('Failed to load tasks from server');
+      }
+      const data = await res.json();
+      setTasks(data);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Failed to load tasks.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let ignore = false;
+    async function load() {
+      try {
+        const res = await fetch('/api/tasks');
+        if (!res.ok) throw new Error('Failed to load tasks from server');
+        const data = await res.json();
+        if (!ignore) {
+          setTasks(data);
+        }
+      } catch (err: unknown) {
+        if (!ignore) {
+          setError(err instanceof Error ? err.message : 'Failed to load tasks.');
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+
+    load();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const handleFormSuccess = (task: TaskData, isEdit: boolean) => {
+    if (isEdit) {
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
+      setEditingTask(null);
+    } else {
+      setTasks((prev) => [task, ...prev]);
+    }
+  };
+
+  const handleEdit = (task: TaskData) => {
+    setEditingTask(task);
+    // Smoothly scroll to the top of the form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingTask(null);
+  };
+
+  const handleDelete = async (id: string) => {
+    const confirmed = window.confirm(
+      'Are you sure you want to delete this task?',
+    );
+    if (!confirmed) return;
+
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/tasks/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to delete task');
+      }
+
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+      if (editingTask?.id === id) {
+        setEditingTask(null);
+      }
+    } catch (err: unknown) {
+      alert(
+        err instanceof Error ? err.message : 'An error occurred while deleting',
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* Hero Header */}
+      <div className="mb-8 text-center sm:text-left">
+        <h1 className="text-3xl font-extrabold tracking-tight text-gray-900 sm:text-4xl">
+          Task &amp; Team Management
+        </h1>
+        <p className="mt-2 text-base text-gray-600">
+          Manage your tasks efficiently, collaborate seamlessly with your team, and track progress all in one place.
+        </p>
+      </div>
+
+      {/* Main Grid */}
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+        {/* Left Column: Form */}
+        <div className="lg:col-span-5">
+          <div className="sticky top-24">
+            <TaskForm
+              onSuccess={handleFormSuccess}
+              editingTask={editingTask}
+              onCancelEdit={handleCancelEdit}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+          </div>
         </div>
-      </main>
+
+        {/* Right Column: Task List */}
+        <div className="lg:col-span-7">
+          <TaskList
+            tasks={tasks}
+            loading={loading}
+            error={error}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            deletingId={deletingId}
+            onRetry={fetchTasks}
+          />
+        </div>
+      </div>
     </div>
   );
 }
