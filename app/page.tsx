@@ -108,19 +108,19 @@ export default function HomePage() {
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
       {/* Hero Header with Dual Gradient */}
       <div className="mb-10 flex flex-col items-center text-center sm:items-start sm:text-left">
-        <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-xs font-semibold text-cyan-400 mb-3 shadow-inner">
-          <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-ping" />
+        <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50/90 px-3.5 py-1 text-xs font-semibold text-indigo-700 mb-3 shadow-xs">
+          <span className="h-2 w-2 rounded-full bg-cyan-500 animate-pulse" />
           Technical Foundation &bull; Assignment 1
         </div>
 
-        <h1 className="text-3xl font-black tracking-tight text-white sm:text-5xl">
+        <h1 className="text-3xl font-black tracking-tight text-slate-900 sm:text-5xl">
           Task &amp; Team{' '}
-          <span className="bg-gradient-to-r from-indigo-400 via-indigo-300 to-cyan-400 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 bg-clip-text text-transparent">
             Management
           </span>
         </h1>
 
-        <p className="mt-3 max-w-2xl text-sm sm:text-base text-slate-400 leading-relaxed">
+        <p className="mt-3 max-w-2xl text-sm sm:text-base text-slate-600 leading-relaxed font-normal">
           Orchestrate workflows with ease. Powered by Next.js App Router, Prisma ORM, and Supabase PostgreSQL.
         </p>
       </div>

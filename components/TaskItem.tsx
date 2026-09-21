@@ -15,24 +15,24 @@ const statusConfig: Record<
 > = {
   TODO: {
     label: 'Todo',
-    bg: 'bg-amber-500/10',
-    text: 'text-amber-300',
-    border: 'border-amber-500/30',
-    dot: 'bg-amber-400',
+    bg: 'bg-amber-50',
+    text: 'text-amber-700',
+    border: 'border-amber-200',
+    dot: 'bg-amber-500',
   },
   IN_PROGRESS: {
     label: 'In Progress',
-    bg: 'bg-cyan-500/10',
-    text: 'text-cyan-300',
-    border: 'border-cyan-500/30',
-    dot: 'bg-cyan-400',
+    bg: 'bg-cyan-50',
+    text: 'text-cyan-800',
+    border: 'border-cyan-200',
+    dot: 'bg-cyan-500',
   },
   DONE: {
     label: 'Completed',
-    bg: 'bg-emerald-500/10',
-    text: 'text-emerald-300',
-    border: 'border-emerald-500/30',
-    dot: 'bg-emerald-400',
+    bg: 'bg-emerald-50',
+    text: 'text-emerald-800',
+    border: 'border-emerald-200',
+    dot: 'bg-emerald-500',
   },
 };
 
@@ -42,15 +42,15 @@ const priorityConfig: Record<
 > = {
   LOW: {
     label: 'Low',
-    badge: 'bg-slate-800 text-slate-300 border-slate-700',
+    badge: 'bg-slate-100 text-slate-700 border-slate-200',
   },
   MEDIUM: {
     label: 'Medium',
-    badge: 'bg-indigo-950/60 text-indigo-300 border-indigo-800/60',
+    badge: 'bg-indigo-50 text-indigo-700 border-indigo-200',
   },
   HIGH: {
     label: 'High',
-    badge: 'bg-rose-950/60 text-rose-300 border-rose-800/60',
+    badge: 'bg-rose-50 text-rose-700 border-rose-200',
   },
 };
 
@@ -81,14 +81,14 @@ export default function TaskItem({
   );
 
   return (
-    <li className="group relative overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/50 p-5 shadow-lg backdrop-blur-md transition-all duration-300 hover:border-slate-700 hover:bg-slate-900/80 hover:shadow-indigo-500/5">
-      {/* Left subtle status indicator bar */}
+    <li className="group relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-lg hover:shadow-indigo-500/5">
+      {/* Left status indicator bar */}
       <div
-        className={`absolute left-0 top-0 bottom-0 w-1 ${
+        className={`absolute left-0 top-0 bottom-0 w-1.5 ${
           task.status === 'DONE'
             ? 'bg-emerald-500'
             : task.status === 'IN_PROGRESS'
-              ? 'bg-cyan-400'
+              ? 'bg-gradient-to-b from-indigo-500 to-cyan-400'
               : 'bg-amber-400'
         }`}
       />
@@ -105,15 +105,15 @@ export default function TaskItem({
             </span>
 
             <span
-              className={`inline-flex items-center rounded-lg border px-2.5 py-0.5 text-xs font-medium ${currentPriority.badge}`}
+              className={`inline-flex items-center rounded-lg border px-2.5 py-0.5 text-xs font-bold ${currentPriority.badge}`}
             >
               {currentPriority.label} Priority
             </span>
 
             {formattedDueDate && (
-              <span className="inline-flex items-center gap-1 text-xs text-slate-400">
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500">
                 <svg
-                  className="h-3.5 w-3.5 text-slate-500"
+                  className="h-3.5 w-3.5 text-slate-400"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -131,36 +131,36 @@ export default function TaskItem({
           </div>
 
           {/* Title */}
-          <h3 className="text-base font-semibold text-white tracking-tight break-words group-hover:text-cyan-300 transition-colors">
+          <h3 className="text-base font-bold text-slate-900 tracking-tight break-words group-hover:text-indigo-600 transition-colors">
             {task.title}
           </h3>
 
           {/* Description */}
           {task.description ? (
-            <p className="mt-2 text-xs sm:text-sm text-slate-400 leading-relaxed whitespace-pre-line break-words">
+            <p className="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed whitespace-pre-line break-words">
               {task.description}
             </p>
           ) : (
-            <p className="mt-2 text-xs italic text-slate-600">
+            <p className="mt-2 text-xs italic text-slate-400">
               No additional details provided
             </p>
           )}
 
           {/* Created date footer */}
-          <div className="mt-3.5 flex items-center gap-1 text-[11px] text-slate-500">
+          <div className="mt-3.5 flex items-center gap-1 text-[11px] font-medium text-slate-400">
             <span>Created on {formattedCreatedAt}</span>
           </div>
         </div>
 
         {/* Action buttons */}
-        <div className="flex shrink-0 items-center gap-2 border-t border-slate-800/80 pt-3 sm:border-t-0 sm:pt-0">
+        <div className="flex shrink-0 items-center gap-2 border-t border-slate-100 pt-3 sm:border-t-0 sm:pt-0">
           <button
             type="button"
             onClick={() => onEdit(task)}
             disabled={isDeleting}
-            className="inline-flex items-center gap-1 rounded-xl border border-slate-700/80 bg-slate-800/60 px-3 py-1.5 text-xs font-medium text-slate-300 transition-all hover:border-indigo-500/50 hover:bg-slate-800 hover:text-white focus:outline-none disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-xs transition-all hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 focus:outline-none disabled:opacity-50"
           >
-            <svg className="h-3.5 w-3.5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-3.5 w-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
             </svg>
             Edit
@@ -169,7 +169,7 @@ export default function TaskItem({
             type="button"
             onClick={() => onDelete(task.id)}
             disabled={isDeleting}
-            className="inline-flex items-center gap-1 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-400 transition-all hover:bg-rose-500/20 hover:text-rose-300 focus:outline-none disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50/60 px-3 py-1.5 text-xs font-bold text-rose-600 shadow-xs transition-all hover:bg-rose-100 hover:text-rose-700 focus:outline-none disabled:opacity-50"
           >
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

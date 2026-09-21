@@ -102,13 +102,13 @@ export default function TaskForm({
   };
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-slate-800/90 bg-slate-900/60 p-6 shadow-2xl backdrop-blur-xl transition-all">
+    <div className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xl shadow-slate-200/60 backdrop-blur-xl transition-all">
       {/* Top subtle highlight line */}
-      <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-indigo-500 via-indigo-400 to-cyan-400 opacity-80" />
+      <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500" />
 
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-100 shadow-xs">
             {isEditing ? (
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -119,7 +119,7 @@ export default function TaskForm({
               </svg>
             )}
           </div>
-          <h2 className="text-base font-bold text-white tracking-wide">
+          <h2 className="text-base font-bold text-slate-900 tracking-tight">
             {isEditing ? 'Edit Task' : 'Create New Task'}
           </h2>
         </div>
@@ -128,7 +128,7 @@ export default function TaskForm({
           <button
             type="button"
             onClick={onCancelEdit}
-            className="rounded-lg px-2.5 py-1 text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            className="rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
           >
             Cancel Edit
           </button>
@@ -136,7 +136,7 @@ export default function TaskForm({
       </div>
 
       {errorMessage && (
-        <div className="mb-5 flex items-center gap-2 rounded-xl bg-rose-500/10 border border-rose-500/20 p-3.5 text-xs font-medium text-rose-400">
+        <div className="mb-5 flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3.5 text-xs font-semibold text-rose-700">
           <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
@@ -148,9 +148,9 @@ export default function TaskForm({
         <div>
           <label
             htmlFor="task-title"
-            className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5"
+            className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5"
           >
-            Title <span className="text-cyan-400">*</span>
+            Title <span className="text-indigo-600">*</span>
           </label>
           <input
             id="task-title"
@@ -159,14 +159,14 @@ export default function TaskForm({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Design team dashboard architecture"
-            className="block w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 shadow-inner transition-all focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+            className="block w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-xs transition-all focus:bg-white focus:border-indigo-500 focus:outline-none focus:ring-3 focus:ring-indigo-500/15"
           />
         </div>
 
         <div>
           <label
             htmlFor="task-description"
-            className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5"
+            className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5"
           >
             Description
           </label>
@@ -176,7 +176,7 @@ export default function TaskForm({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Add relevant context, checklist, or deliverables..."
-            className="block w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 shadow-inner transition-all focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+            className="block w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-xs transition-all focus:bg-white focus:border-indigo-500 focus:outline-none focus:ring-3 focus:ring-indigo-500/15"
           />
         </div>
 
@@ -184,7 +184,7 @@ export default function TaskForm({
           <div>
             <label
               htmlFor="task-status"
-              className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5"
+              className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5"
             >
               Status
             </label>
@@ -192,18 +192,18 @@ export default function TaskForm({
               id="task-status"
               value={status}
               onChange={(e) => setStatus(e.target.value as TaskStatusType)}
-              className="block w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2.5 text-xs text-slate-200 shadow-inner transition-all focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+              className="block w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-xs font-semibold text-slate-800 shadow-xs transition-all focus:bg-white focus:border-indigo-500 focus:outline-none focus:ring-3 focus:ring-indigo-500/15"
             >
-              <option value="TODO" className="bg-slate-900 text-slate-200">Todo</option>
-              <option value="IN_PROGRESS" className="bg-slate-900 text-slate-200">In Progress</option>
-              <option value="DONE" className="bg-slate-900 text-slate-200">Done</option>
+              <option value="TODO">To Do</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="DONE">Done</option>
             </select>
           </div>
 
           <div>
             <label
               htmlFor="task-priority"
-              className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5"
+              className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5"
             >
               Priority
             </label>
@@ -213,18 +213,18 @@ export default function TaskForm({
               onChange={(e) =>
                 setPriority(e.target.value as TaskPriorityType)
               }
-              className="block w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2.5 text-xs text-slate-200 shadow-inner transition-all focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+              className="block w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-xs font-semibold text-slate-800 shadow-xs transition-all focus:bg-white focus:border-indigo-500 focus:outline-none focus:ring-3 focus:ring-indigo-500/15"
             >
-              <option value="LOW" className="bg-slate-900 text-slate-200">Low</option>
-              <option value="MEDIUM" className="bg-slate-900 text-slate-200">Medium</option>
-              <option value="HIGH" className="bg-slate-900 text-slate-200">High</option>
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
             </select>
           </div>
 
           <div>
             <label
               htmlFor="task-due-date"
-              className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5"
+              className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5"
             >
               Due Date
             </label>
@@ -233,7 +233,7 @@ export default function TaskForm({
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
-              className="block w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-xs text-slate-200 shadow-inner transition-all focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 [color-scheme:dark]"
+              className="block w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-xs font-semibold text-slate-800 shadow-xs transition-all focus:bg-white focus:border-indigo-500 focus:outline-none focus:ring-3 focus:ring-indigo-500/15"
             />
           </div>
         </div>
@@ -244,7 +244,7 @@ export default function TaskForm({
               type="button"
               disabled={loading}
               onClick={onCancelEdit}
-              className="rounded-xl border border-slate-700/80 bg-slate-800/60 px-4 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-xs"
             >
               Cancel
             </button>
@@ -253,7 +253,7 @@ export default function TaskForm({
           <button
             type="submit"
             disabled={loading}
-            className="group relative inline-flex items-center justify-center overflow-hidden rounded-xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-cyan-400 px-6 py-2.5 text-xs font-bold text-white shadow-lg shadow-indigo-500/25 transition-all hover:shadow-indigo-500/40 hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+            className="group relative inline-flex items-center justify-center overflow-hidden rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 px-6 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-500/25 transition-all hover:shadow-lg hover:shadow-indigo-500/35 hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? (
               <span className="flex items-center gap-2">

@@ -1,46 +1,30 @@
 import Link from 'next/link';
 
-export default function LoginPage() {
+export default function NotFound() {
   return (
-    <div className="mx-auto flex max-w-4xl flex-col items-center justify-center px-4 py-24 text-center sm:px-6">
+    <div className="mx-auto flex min-h-[70vh] max-w-2xl flex-col items-center justify-center px-4 py-16 text-center sm:px-6">
       <div className="relative mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-500 p-[2px] shadow-xl shadow-indigo-500/20">
         <div className="flex h-full w-full items-center justify-center rounded-[22px] bg-white text-indigo-600 shadow-inner">
-          <svg
-            className="h-9 w-9"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth="1.75"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-            />
-          </svg>
+          <span className="text-2xl font-black">404</span>
         </div>
       </div>
 
       <span className="inline-block rounded-full border border-indigo-200 bg-indigo-50 px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-indigo-700 mb-3 shadow-xs">
-        Assignment 2/3 Preview
+        Page Not Found
       </span>
 
-      <h1 className="text-4xl font-black tracking-tight text-slate-900 sm:text-6xl">
-        Account{' '}
+      <h1 className="text-3xl font-black tracking-tight text-slate-900 sm:text-5xl">
+        Trang không{' '}
         <span className="bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 bg-clip-text text-transparent">
-          Access
+          tồn tại
         </span>
       </h1>
 
-      <p className="mt-4 text-xl font-bold bg-gradient-to-r from-indigo-600 to-cyan-600 bg-clip-text text-transparent">
-        Coming Soon
+      <p className="mt-3 max-w-md text-sm sm:text-base text-slate-600 leading-relaxed">
+        Đường dẫn bạn vừa truy cập không tồn tại hoặc đã được chuyển sang địa chỉ khác.
       </p>
 
-      <p className="mt-4 max-w-md text-sm sm:text-base text-slate-600 leading-relaxed">
-        Secure OAuth authentication, user session tokens, and profile management will be implemented in future iterations.
-      </p>
-
-      <div className="mt-8">
+      <div className="mt-8 flex gap-3">
         <Link
           href="/"
           className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 px-6 py-2.5 text-xs font-bold text-white shadow-lg shadow-indigo-500/25 transition-all hover:scale-105 active:scale-95"
@@ -48,7 +32,7 @@ export default function LoginPage() {
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
-          Back to Tasks
+          Quay lại Trang Chủ
         </Link>
       </div>
     </div>
