@@ -6,8 +6,11 @@ import { TaskPriority, TaskStatus } from '@prisma/client';
 const validStatuses = Object.values(TaskStatus);
 const validPriorities = Object.values(TaskPriority);
 
-// GET /api/tasks - Retrieve tasks accessible by current user
-export async function GET(request: Request) {
+// GET /api/teams/[id]/tasks - List tasks for a team
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     const user = await getAuthUser(request);
     if (!user) {
@@ -17,26 +20,34 @@ export async function GET(request: Request) {
       );
     }
 
-    // Find all teams the user belongs to
-    const userTeams = await prisma.teamMember.findMany({
-      where: { userId: user.id },
-      select: { teamId: true },
-    });
-    const teamIds = userTeams.map((t) => t.teamId);
+    const { id: teamId } = await params;
 
-    // Return tasks that either belong to user's teams or are assigned to user or created by user
-    const tasks = await prisma.task.findMany({
-      where: {
-        OR: [
-          { teamId: { in: teamIds } },
-          { assigneeId: user.id },
-          { creatorId: user.id },
-        ],
-      },
+    const team = await prisma.team.findUnique({
+      where: { id: teamId },
       include: {
-        team: {
-          select: { id: true, name: true },
-        },
+        members: true,
+      },
+    });
+
+    if (!team) {
+      return NextResponse.json(
+        { error: `Team with id '${teamId}' not found` },
+        { status: 404 },
+      );
+    }
+
+    // Verify user is a member of the team
+    const isMember = team.members.some((m) => m.userId === user.id);
+    if (!isMember && team.ownerId !== user.id) {
+      return NextResponse.json(
+        { error: 'Forbidden. You are not a member of this team.' },
+        { status: 403 },
+      );
+    }
+
+    const tasks = await prisma.task.findMany({
+      where: { teamId },
+      include: {
         assignee: {
           select: { id: true, name: true, email: true },
         },
@@ -51,22 +62,50 @@ export async function GET(request: Request) {
 
     return NextResponse.json(tasks, { status: 200 });
   } catch (error) {
-    console.error('Error fetching tasks:', error);
+    console.error('Error fetching team tasks:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch tasks from database' },
+      { error: 'Failed to fetch tasks for team' },
       { status: 500 },
     );
   }
 }
 
-// POST /api/tasks - Create a new task
-export async function POST(request: Request) {
+// POST /api/teams/[id]/tasks - Create a new task within a team
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     const user = await getAuthUser(request);
     if (!user) {
       return NextResponse.json(
-        { error: 'Unauthorized. Please login to create tasks.' },
+        { error: 'Unauthorized. Please login.' },
         { status: 401 },
+      );
+    }
+
+    const { id: teamId } = await params;
+
+    const team = await prisma.team.findUnique({
+      where: { id: teamId },
+      include: {
+        members: true,
+      },
+    });
+
+    if (!team) {
+      return NextResponse.json(
+        { error: `Team with id '${teamId}' not found` },
+        { status: 404 },
+      );
+    }
+
+    // Any member of the team can create tasks
+    const isMember = team.members.some((m) => m.userId === user.id);
+    if (!isMember && team.ownerId !== user.id) {
+      return NextResponse.json(
+        { error: 'Forbidden. You must be a member of this team to create tasks.' },
+        { status: 403 },
       );
     }
 
@@ -80,8 +119,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { title, description, status, priority, dueDate, teamId, assigneeId } =
-      body;
+    const { title, description, status, priority, dueDate, assigneeId } = body;
 
     if (!title || typeof title !== 'string' || title.trim() === '') {
       return NextResponse.json(
@@ -108,21 +146,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // If teamId is specified, ensure user belongs to this team
-    if (teamId) {
-      const membership = await prisma.teamMember.findUnique({
-        where: {
-          teamId_userId: {
-            teamId,
-            userId: user.id,
-          },
-        },
-      });
-
-      if (!membership) {
+    // If assigneeId is specified, ensure they are a member of the team
+    if (assigneeId) {
+      const isAssigneeMember = team.members.some((m) => m.userId === assigneeId);
+      if (!isAssigneeMember && team.ownerId !== assigneeId) {
         return NextResponse.json(
-          { error: 'Forbidden. You are not a member of the selected team.' },
-          { status: 403 },
+          { error: 'Assignee must be an active member of this team' },
+          { status: 400 },
         );
       }
     }
@@ -146,14 +176,11 @@ export async function POST(request: Request) {
         status: (status as TaskStatus) || TaskStatus.TODO,
         priority: (priority as TaskPriority) || TaskPriority.MEDIUM,
         dueDate: parsedDueDate,
-        teamId: teamId || null,
+        teamId: team.id,
         creatorId: user.id,
         assigneeId: assigneeId || null,
       },
       include: {
-        team: {
-          select: { id: true, name: true },
-        },
         assignee: {
           select: { id: true, name: true, email: true },
         },
@@ -165,7 +192,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(task, { status: 201 });
   } catch (error) {
-    console.error('Error creating task:', error);
+    console.error('Error creating team task:', error);
     return NextResponse.json(
       { error: 'Failed to create task' },
       { status: 500 },

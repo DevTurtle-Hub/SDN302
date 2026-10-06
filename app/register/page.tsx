@@ -5,12 +5,14 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter();
-  const { user, login } = useAuth();
+  const { user, register } = useAuth();
 
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,26 +26,30 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setLoading(true);
 
-    const res = await login(email, password);
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long');
+      return;
+    }
+
+    setLoading(true);
+    const res = await register(name, email, password);
     setLoading(false);
 
     if (res.success) {
       router.push('/dashboard');
     } else {
-      setError(res.error || 'Failed to login');
+      setError(res.error || 'Failed to register account');
     }
   };
 
-  const handleFillTestAccount = () => {
-    setEmail('demo@example.com');
-    setPassword('Password123@');
-    setError(null);
-  };
-
   return (
-    <div className="mx-auto flex max-w-md flex-col justify-center px-4 py-16 sm:px-6">
+    <div className="mx-auto flex max-w-md flex-col justify-center px-4 py-14 sm:px-6">
       <div className="rounded-3xl border border-slate-200/80 bg-white p-8 shadow-xl shadow-slate-100">
         {/* Header Icon */}
         <div className="mb-6 flex flex-col items-center text-center">
@@ -59,16 +65,16 @@ export default function LoginPage() {
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                  d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
                 />
               </svg>
             </div>
           </div>
           <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
-            Welcome Back
+            Create Account
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Sign in to access your teams and collaborative tasks
+            Join TaskFlow to manage teams and execute tasks efficiently
           </p>
         </div>
 
@@ -82,8 +88,22 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* Login Form */}
+        {/* Register Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+              Full Name
+            </label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nguyen Van A"
+              className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            />
+          </div>
+
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
               Email Address
@@ -107,7 +127,21 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder="At least 6 characters"
+              className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+              Confirm Password
+            </label>
+            <input
+              type="password"
+              required
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Repeat your password"
               className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             />
           </div>
@@ -117,38 +151,18 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full cursor-pointer rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/25 transition-all hover:opacity-95 active:scale-[0.99] disabled:opacity-50"
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? 'Creating Account...' : 'Register Account'}
           </button>
         </form>
 
-        {/* Grader Helper Box */}
-        <div className="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4 text-center">
-          <p className="text-xs font-bold text-indigo-900">
-            Grading Test Account Ready
-          </p>
-          <p className="mt-1 text-[11px] text-indigo-700">
-            Email: <code className="font-semibold text-slate-800">demo@example.com</code> &bull; Password: <code className="font-semibold text-slate-800">Password123@</code>
-          </p>
-          <button
-            type="button"
-            onClick={handleFillTestAccount}
-            className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-bold text-indigo-600 shadow-xs hover:bg-indigo-50 transition-colors cursor-pointer"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            Auto-fill Test Account
-          </button>
-        </div>
-
-        {/* Register footer link */}
+        {/* Login footer link */}
         <p className="mt-6 text-center text-xs text-slate-500">
-          Don&apos;t have an account yet?{' '}
+          Already have an account?{' '}
           <Link
-            href="/register"
+            href="/login"
             className="font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
           >
-            Create an account
+            Sign in here
           </Link>
         </p>
       </div>
