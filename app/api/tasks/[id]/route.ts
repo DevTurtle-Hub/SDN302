@@ -198,18 +198,39 @@ export async function DELETE(
       );
     }
 
-    await prisma.task.delete({
-      where: { id },
-    });
+    try {
+      await prisma.task.delete({
+        where: { id },
+      });
+    } catch (deleteError: unknown) {
+      // Prisma P2025: Record to delete does not exist (already deleted)
+      if (
+        deleteError &&
+        typeof deleteError === 'object' &&
+        'code' in deleteError &&
+        deleteError.code === 'P2025'
+      ) {
+        return NextResponse.json(
+          { message: 'Task already deleted or not found', id },
+          { status: 200 },
+        );
+      }
+      throw deleteError;
+    }
 
     return NextResponse.json(
       { message: 'Task deleted successfully', id },
       { status: 200 },
     );
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error deleting task:', error);
     return NextResponse.json(
-      { error: 'Failed to delete task' },
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to delete task',
+      },
       { status: 500 },
     );
   }

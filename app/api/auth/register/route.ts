@@ -67,34 +67,13 @@ export async function POST(request: Request) {
       },
     });
 
-    // Create session token
-    const token = await signToken({
-      userId: user.id,
-      email: user.email,
-      name: user.name,
-    });
-
-    const response = NextResponse.json(
+    return NextResponse.json(
       {
         message: 'Account registered successfully',
         user,
-        token,
       },
       { status: 201 },
     );
-
-    // Set secure auth cookie
-    response.cookies.set({
-      name: AUTH_COOKIE_NAME,
-      value: token,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60, // 7 days
-    });
-
-    return response;
   } catch (error) {
     console.error('Error during registration:', error);
     return NextResponse.json(

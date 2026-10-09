@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 
 interface Member {
   id: string;
+  userId: string;
   role: string;
   joinedAt: string;
   user: {
@@ -48,9 +49,10 @@ export default function TeamDetailPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, logout } = useAuth();
 
   const [team, setTeam] = useState<TeamDetail | null>(null);
+  const [allUserTeams, setAllUserTeams] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'tasks' | 'members'>('tasks');
@@ -83,6 +85,7 @@ export default function TeamDetailPage({
   const [taskDueDate, setTaskDueDate] = useState('');
   const [taskAssigneeId, setTaskAssigneeId] = useState('');
   const [savingTask, setSavingTask] = useState(false);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [taskModalError, setTaskModalError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -91,11 +94,15 @@ export default function TeamDetailPage({
     }
   }, [authLoading, user, router]);
 
-  const fetchTeamDetails = useCallback(async () => {
+  const fetchTeamDetails = useCallback(async (showSpinner = true) => {
     try {
-      setLoading(true);
+      if (showSpinner) setLoading(true);
       setError(null);
       const res = await fetch(`/api/teams/${id}`);
+      if (res.status === 401) {
+        await logout();
+        return;
+      }
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || 'Failed to load team');
@@ -107,13 +114,17 @@ export default function TeamDetailPage({
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error loading team');
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
-  }, [id]);
+  }, [id, logout]);
 
   useEffect(() => {
     if (user && id) {
-      fetchTeamDetails();
+      fetchTeamDetails(true);
+      fetch('/api/teams')
+        .then((res) => (res.ok ? res.json() : []))
+        .then((data) => setAllUserTeams(data))
+        .catch(() => {});
     }
   }, [user, id, fetchTeamDetails]);
 
@@ -180,7 +191,7 @@ export default function TeamDetailPage({
 
       setMemberActionSuccess(`Member '${data.user.name}' added successfully!`);
       setAddMemberEmail('');
-      fetchTeamDetails();
+      fetchTeamDetails(false);
     } catch (err: unknown) {
       setMemberActionError(err instanceof Error ? err.message : 'Error adding member');
     } finally {
@@ -206,7 +217,7 @@ export default function TeamDetailPage({
       if (!res.ok) throw new Error(data.error || 'Failed to remove member');
 
       setMemberActionSuccess(`Removed '${memberName}' from team.`);
-      fetchTeamDetails();
+      fetchTeamDetails(false);
     } catch (err: unknown) {
       setMemberActionError(err instanceof Error ? err.message : 'Error removing member');
     }
@@ -263,6 +274,16 @@ export default function TeamDetailPage({
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to update task');
+
+        // Optimistically update task in local state immediately
+        setTeam((prev) =>
+          prev
+            ? {
+                ...prev,
+                tasks: prev.tasks.map((t) => (t.id === data.id ? data : t)),
+              }
+            : prev,
+        );
       } else {
         // POST /api/teams/:id/tasks
         const res = await fetch(`/api/teams/${id}/tasks`, {
@@ -272,10 +293,20 @@ export default function TeamDetailPage({
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to create task');
+
+        // Optimistically prepend new task to local state immediately
+        setTeam((prev) =>
+          prev
+            ? {
+                ...prev,
+                tasks: [data, ...prev.tasks],
+              }
+            : prev,
+        );
       }
 
       setShowTaskModal(false);
-      fetchTeamDetails();
+      fetchTeamDetails(false);
     } catch (err: unknown) {
       setTaskModalError(err instanceof Error ? err.message : 'Error saving task');
     } finally {
@@ -285,6 +316,8 @@ export default function TeamDetailPage({
 
   // Delete Task
   const handleDeleteTask = async (task: TaskItem) => {
+    if (deletingTaskId) return;
+
     const canDelete =
       user &&
       (user.id === task.creatorId ||
@@ -299,6 +332,8 @@ export default function TeamDetailPage({
     const confirmed = window.confirm(`Delete task "${task.title}"?`);
     if (!confirmed) return;
 
+    setDeletingTaskId(task.id);
+
     try {
       const res = await fetch(`/api/tasks/${task.id}`, {
         method: 'DELETE',
@@ -306,9 +341,22 @@ export default function TeamDetailPage({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to delete task');
 
-      fetchTeamDetails();
+      // Optimistically update task list immediately for fast UI feedback
+      setTeam((prev) =>
+        prev
+          ? {
+              ...prev,
+              tasks: prev.tasks.filter((t) => t.id !== task.id),
+            }
+          : prev,
+      );
+
+      fetchTeamDetails(false);
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Error deleting task');
+      fetchTeamDetails(false);
+    } finally {
+      setDeletingTaskId(null);
     }
   };
 
@@ -325,10 +373,13 @@ export default function TeamDetailPage({
     });
   }, [team, searchQuery, statusFilter, priorityFilter]);
 
-  if (authLoading || (!user && loading)) {
+  if (authLoading || loading) {
     return (
       <div className="mx-auto flex max-w-6xl items-center justify-center py-32">
-        <div className="h-9 w-9 animate-spin rounded-full border-3 border-indigo-600 border-t-transparent" />
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-9 w-9 animate-spin rounded-full border-3 border-indigo-600 border-t-transparent" />
+          <p className="text-sm font-semibold text-slate-500">Loading team workspace...</p>
+        </div>
       </div>
     );
   }
@@ -359,14 +410,33 @@ export default function TeamDetailPage({
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-      {/* Breadcrumb Navigation */}
-      <nav className="mb-6 flex items-center gap-2 text-xs font-semibold text-slate-500">
-        <Link href="/teams" className="hover:text-indigo-600 transition-colors">
-          Teams
-        </Link>
-        <span>/</span>
-        <span className="text-slate-900 line-clamp-1">{team.name}</span>
-      </nav>
+      {/* Breadcrumb Navigation & Team Switcher */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <nav className="flex items-center gap-2 font-semibold text-slate-500">
+          <Link href="/teams" className="hover:text-indigo-600 transition-colors">
+            Teams
+          </Link>
+          <span>/</span>
+          <span className="text-slate-900 line-clamp-1">{team.name}</span>
+        </nav>
+
+        {allUserTeams.length > 1 && (
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500 font-medium">Switch Team:</span>
+            <select
+              value={id}
+              onChange={(e) => router.push(`/teams/${e.target.value}`)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-2xs hover:border-indigo-300 focus:border-indigo-500 focus:outline-none cursor-pointer"
+            >
+              {allUserTeams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} {t.id === id ? '(Current)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
 
       {/* Team Header Banner */}
       <div className="mb-8 rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-xs">
@@ -638,9 +708,10 @@ export default function TeamDetailPage({
                         {canDelete && (
                           <button
                             onClick={() => handleDeleteTask(task)}
-                            className="cursor-pointer rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 shadow-2xs hover:bg-red-50 transition-colors"
+                            disabled={deletingTaskId === task.id}
+                            className="cursor-pointer rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 shadow-2xs hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            Delete
+                            {deletingTaskId === task.id ? 'Deleting...' : 'Delete'}
                           </button>
                         )}
                       </div>
@@ -744,9 +815,10 @@ export default function TeamDetailPage({
                                 {canDelete && (
                                   <button
                                     onClick={() => handleDeleteTask(task)}
-                                    className="cursor-pointer text-red-500 hover:text-red-700 font-bold"
+                                    disabled={deletingTaskId === task.id}
+                                    className="cursor-pointer text-red-500 hover:text-red-700 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
-                                    Delete
+                                    {deletingTaskId === task.id ? 'Deleting...' : 'Delete'}
                                   </button>
                                 )}
                               </div>
@@ -781,28 +853,47 @@ export default function TeamDetailPage({
           {/* Add Member Form (Owner only) */}
           {isOwner && (
             <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5">
-              <h3 className="text-sm font-black text-indigo-950">Add Member to Workspace</h3>
-              <p className="mt-0.5 text-xs text-indigo-700">
-                Type the email address of a registered user to invite them into this team.
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-600 text-xs font-bold text-white">
+                  @
+                </span>
+                <h3 className="text-sm font-black text-indigo-950">Thêm Thành Viên Vào Nhóm (Bằng Email Tài Khoản)</h3>
+              </div>
+              <p className="mt-1 text-xs text-indigo-700 leading-relaxed">
+                Nhập <strong>địa chỉ Email của tài khoản đã đăng ký</strong> trong hệ thống (Hệ thống định danh người dùng qua email duy nhất, không nhập tên).
               </p>
 
               <form onSubmit={handleAddMember} className="mt-3 flex flex-col sm:flex-row gap-2">
                 <input
                   type="email"
                   required
-                  placeholder="collaborator@example.com"
+                  placeholder="Nhập email tài khoản (ví dụ: member@example.com)"
                   value={addMemberEmail}
                   onChange={(e) => setAddMemberEmail(e.target.value)}
-                  className="flex-1 rounded-xl border border-indigo-200 bg-white px-4 py-2 text-xs text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="flex-1 rounded-xl border border-indigo-200 bg-white px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
                 <button
                   type="submit"
                   disabled={addingMember}
-                  className="cursor-pointer rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                  className="cursor-pointer rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 transition-colors disabled:opacity-50"
                 >
-                  {addingMember ? 'Adding...' : 'Add Member'}
+                  {addingMember ? 'Đang thêm...' : '+ Add Member'}
                 </button>
               </form>
+
+              {/* Quick sample account hint */}
+              {!team.members.some((m) => m.user.email === 'member@example.com') && (
+                <div className="mt-2.5 flex items-center gap-2 text-[11px] text-slate-500">
+                  <span>💡 Tài khoản test có sẵn:</span>
+                  <button
+                    type="button"
+                    onClick={() => setAddMemberEmail('member@example.com')}
+                    className="cursor-pointer rounded-md bg-white px-2 py-0.5 font-semibold text-indigo-600 border border-indigo-200 hover:bg-indigo-50 transition-colors"
+                  >
+                    member@example.com
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -970,7 +1061,7 @@ export default function TeamDetailPage({
                     <option value="">Unassigned</option>
                     {team.members.map((m) => (
                       <option key={m.userId} value={m.userId}>
-                        {m.user.name} ({m.user.email})
+                        {m.user.name} ({m.user.email}){m.userId === team.ownerId ? ' [Owner]' : ''}
                       </option>
                     ))}
                   </select>

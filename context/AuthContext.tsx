@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshUser();
   }, [refreshUser]);
 
-  const login = async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string) => {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -62,9 +62,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       return { success: false, error: 'Network error occurred during login' };
     }
-  };
+  }, []);
 
-  const register = async (name: string, email: string, password: string) => {
+  const register = useCallback(async (name: string, email: string, password: string) => {
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
@@ -75,21 +75,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!res.ok) {
         return { success: false, error: data.error || 'Failed to register' };
       }
-      setUser(data.user);
       return { success: true };
     } catch {
       return { success: false, error: 'Network error occurred during registration' };
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore
     } finally {
       setUser(null);
       router.push('/login');
     }
-  };
+  }, [router]);
 
   return (
     <AuthContext.Provider

@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { user, register } = useAuth();
+  const { user, loading: authLoading, register } = useAuth();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -19,10 +19,10 @@ export default function RegisterPage() {
 
   // If already logged in, redirect to dashboard
   useEffect(() => {
-    if (user) {
+    if (!authLoading && user) {
       router.push('/dashboard');
     }
-  }, [user, router]);
+  }, [user, authLoading, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,7 +43,7 @@ export default function RegisterPage() {
     setLoading(false);
 
     if (res.success) {
-      router.push('/dashboard');
+      router.push('/login?registered=true');
     } else {
       setError(res.error || 'Failed to register account');
     }
@@ -91,7 +91,11 @@ export default function RegisterPage() {
         )}
 
         {/* Register Form - 4 Rows Stacked Layout */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
+          {/* Hidden dummy inputs to deter aggressive browser password managers */}
+          <input type="text" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
+          <input type="password" style={{ display: 'none' }} tabIndex={-1} autoComplete="new-password" />
+
           {/* Hàng 1: Full Name */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
@@ -105,6 +109,8 @@ export default function RegisterPage() {
               </div>
               <input
                 type="text"
+                name="user_fullname"
+                autoComplete="off"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -127,6 +133,8 @@ export default function RegisterPage() {
               </div>
               <input
                 type="email"
+                name="user_new_email"
+                autoComplete="new-password"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -149,6 +157,8 @@ export default function RegisterPage() {
               </div>
               <input
                 type={showPassword ? 'text' : 'password'}
+                name="user_new_password"
+                autoComplete="new-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -171,6 +181,8 @@ export default function RegisterPage() {
               </div>
               <input
                 type={showPassword ? 'text' : 'password'}
+                name="user_new_password_confirm"
+                autoComplete="new-password"
                 required
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}

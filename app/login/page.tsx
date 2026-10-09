@@ -1,26 +1,43 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
-  const { user, login } = useAuth();
+  const searchParams = useSearchParams();
+  const registered = searchParams.get('registered') === 'true';
+  const { user, loading: authLoading, login } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberAccount, setRememberAccount] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Load remembered account only if user explicitly saved it on this device
+  useEffect(() => {
+    try {
+      const isRemembered = localStorage.getItem('taskflow_remember_account') === 'true';
+      const savedEmail = localStorage.getItem('taskflow_saved_email');
+      if (isRemembered && savedEmail) {
+        setEmail(savedEmail);
+        setRememberAccount(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   // If already logged in, redirect to dashboard
   useEffect(() => {
-    if (user) {
+    if (!authLoading && user) {
       router.push('/dashboard');
     }
-  }, [user, router]);
+  }, [user, authLoading, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,16 +48,31 @@ export default function LoginPage() {
     setLoading(false);
 
     if (res.success) {
+      try {
+        if (rememberAccount) {
+          localStorage.setItem('taskflow_remember_account', 'true');
+          localStorage.setItem('taskflow_saved_email', email);
+        } else {
+          localStorage.removeItem('taskflow_remember_account');
+          localStorage.removeItem('taskflow_saved_email');
+        }
+      } catch {
+        // ignore
+      }
       router.push('/dashboard');
     } else {
       setError(res.error || 'Failed to login');
     }
   };
 
+  const [filled, setFilled] = useState(false);
+
   const handleFillTestAccount = () => {
     setEmail('demo@example.com');
     setPassword('Password123@');
     setError(null);
+    setFilled(true);
+    setTimeout(() => setFilled(false), 1500);
   };
 
   return (
@@ -74,6 +106,16 @@ export default function LoginPage() {
           </p>
         </div>
 
+        {/* Success message banner after registration */}
+        {registered && (
+          <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs text-emerald-800 font-semibold flex items-center gap-2.5 animate-in fade-in">
+            <svg className="h-4 w-4 shrink-0 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+            </svg>
+            <span>Tài khoản đã tạo thành công! Vui lòng đăng nhập để bắt đầu.</span>
+          </div>
+        )}
+
         {/* Error message banner */}
         {error && (
           <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-700 font-semibold flex items-center gap-2.5">
@@ -85,7 +127,11 @@ export default function LoginPage() {
         )}
 
         {/* Login Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
+          {/* Prevent aggressive browser password managers from auto-filling without consent */}
+          <input type="text" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
+          <input type="password" style={{ display: 'none' }} tabIndex={-1} autoComplete="new-password" />
+
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
               Email Address
@@ -98,6 +144,8 @@ export default function LoginPage() {
               </div>
               <input
                 type="email"
+                name="login_email"
+                autoComplete="off"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -119,6 +167,8 @@ export default function LoginPage() {
               </div>
               <input
                 type={showPassword ? 'text' : 'password'}
+                name="login_password"
+                autoComplete="current-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -128,8 +178,18 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Checkbox Show Password */}
-          <div className="flex items-center pt-1">
+          {/* Options: Remember Account on Device & Show Password */}
+          <div className="flex items-center justify-between pt-1">
+            <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-600 hover:text-slate-900">
+              <input
+                type="checkbox"
+                checked={rememberAccount}
+                onChange={(e) => setRememberAccount(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+              />
+              Lưu tài khoản trên máy này
+            </label>
+
             <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-600 hover:text-slate-900">
               <input
                 type="checkbox"
@@ -150,25 +210,35 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* Grader Helper Box */}
-        <div className="mt-7 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4 text-center">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100/90 px-2.5 py-0.5 text-[11px] font-bold text-indigo-800 mb-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Grading Test Account
+        {/* Test Account Helper */}
+        <div className="mt-6 rounded-2xl border border-slate-200/90 bg-slate-50/80 p-4 text-xs">
+          <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-slate-200/60">
+            <span className="font-semibold text-slate-700">
+              Tài khoản để test
+            </span>
+            <button
+              type="button"
+              onClick={handleFillTestAccount}
+              className={`cursor-pointer rounded-lg px-2.5 py-1 font-semibold transition-all ${
+                filled
+                  ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                  : 'bg-white text-indigo-600 border border-slate-200 shadow-2xs hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200'
+              }`}
+            >
+              {filled ? '✓ Đã điền' : 'Tự động điền'}
+            </button>
           </div>
-          <p className="text-xs text-indigo-900 font-medium">
-            Email: <code className="font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-indigo-200">demo@example.com</code> &bull; Pass: <code className="font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-indigo-200">Password123@</code>
-          </p>
-          <button
-            type="button"
-            onClick={handleFillTestAccount}
-            className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-xs font-bold text-indigo-700 shadow-2xs hover:bg-indigo-50 transition-all cursor-pointer"
-          >
-            <svg className="h-3.5 w-3.5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            Auto-fill Test Credentials
-          </button>
+
+          <div className="space-y-1.5 text-slate-600">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-500 min-w-[70px]">Tài khoản:</span>
+              <span className="font-semibold text-slate-800">demo@example.com</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-500 min-w-[70px]">Mật khẩu:</span>
+              <span className="font-semibold text-slate-800">Password123@</span>
+            </div>
+          </div>
         </div>
 
         {/* Register footer link */}
@@ -183,5 +253,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="flex-1" />}>
+      <LoginForm />
+    </Suspense>
   );
 }

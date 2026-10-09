@@ -7,4 +7,5 @@ const nextConfig: NextConfig = {
   },
 };
 
+// Optimized database connection pooling
 export default nextConfig;

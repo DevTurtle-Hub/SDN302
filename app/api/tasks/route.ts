@@ -17,18 +17,11 @@ export async function GET(request: Request) {
       );
     }
 
-    // Find all teams the user belongs to
-    const userTeams = await prisma.teamMember.findMany({
-      where: { userId: user.id },
-      select: { teamId: true },
-    });
-    const teamIds = userTeams.map((t) => t.teamId);
-
-    // Return tasks that either belong to user's teams or are assigned to user or created by user
+    // Return tasks that either belong to user's teams or are assigned to user or created by user (single query)
     const tasks = await prisma.task.findMany({
       where: {
         OR: [
-          { teamId: { in: teamIds } },
+          { team: { members: { some: { userId: user.id } } } },
           { assigneeId: user.id },
           { creatorId: user.id },
         ],
