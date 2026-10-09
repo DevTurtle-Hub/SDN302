@@ -14,18 +14,21 @@ function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberAccount, setRememberAccount] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load remembered account only if user explicitly saved it on this device
+  // Forgot password modal state
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSubmitted, setForgotSubmitted] = useState(false);
+
+  // Load saved email if present
   useEffect(() => {
     try {
-      const isRemembered = localStorage.getItem('taskflow_remember_account') === 'true';
       const savedEmail = localStorage.getItem('taskflow_saved_email');
-      if (isRemembered && savedEmail) {
+      if (savedEmail) {
         setEmail(savedEmail);
-        setRememberAccount(true);
       }
     } catch {
       // ignore
@@ -49,13 +52,7 @@ function LoginForm() {
 
     if (res.success) {
       try {
-        if (rememberAccount) {
-          localStorage.setItem('taskflow_remember_account', 'true');
-          localStorage.setItem('taskflow_saved_email', email);
-        } else {
-          localStorage.removeItem('taskflow_remember_account');
-          localStorage.removeItem('taskflow_saved_email');
-        }
+        localStorage.setItem('taskflow_saved_email', email);
       } catch {
         // ignore
       }
@@ -175,20 +172,43 @@ function LoginForm() {
                 placeholder="••••••••"
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 pl-10 pr-10 text-sm text-slate-900 placeholder-slate-400 transition-all focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                tabIndex={-1}
+                title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+              >
+                {showPassword ? (
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
+                  </svg>
+                ) : (
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
+              </button>
             </div>
           </div>
 
-          {/* Options: Remember Account on Device & Show Password */}
+          {/* Options: Quên mật khẩu & Show Password */}
           <div className="flex items-center justify-between pt-1">
-            <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-600 hover:text-slate-900">
-              <input
-                type="checkbox"
-                checked={rememberAccount}
-                onChange={(e) => setRememberAccount(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-              />
-              Lưu tài khoản trên máy này
-            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setForgotEmail(email);
+                setForgotSubmitted(false);
+                setShowForgotPassword(true);
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:underline cursor-pointer transition-colors"
+            >
+              <svg className="h-3.5 w-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              </svg>
+              Quên mật khẩu?
+            </button>
 
             <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-600 hover:text-slate-900">
               <input
@@ -251,6 +271,107 @@ function LoginForm() {
             Create an account
           </Link>
         </p>
+
+        {/* Modal: Quên mật khẩu */}
+        {showForgotPassword && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+            <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-black text-slate-900">Quên mật khẩu</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(false)}
+                  className="cursor-pointer rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {!forgotSubmitted ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setForgotLoading(true);
+                    setTimeout(() => {
+                      setForgotLoading(false);
+                      setForgotSubmitted(true);
+                    }, 500);
+                  }}
+                  className="space-y-4"
+                >
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Vui lòng nhập địa chỉ email tài khoản của bạn. Hệ thống sẽ hỗ trợ hướng dẫn khôi phục mật khẩu.
+                  </p>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Email tài khoản
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 px-3.5 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2.5 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotPassword(false)}
+                      className="cursor-pointer rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={forgotLoading}
+                      className="cursor-pointer rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 px-4 py-2 text-xs font-bold text-white shadow-md shadow-indigo-500/25 hover:opacity-95 disabled:opacity-50"
+                    >
+                      {forgotLoading ? 'Đang gửi...' : 'Gửi yêu cầu'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-xs text-emerald-800 leading-relaxed">
+                    <div className="flex items-center gap-2 font-bold mb-1 text-emerald-900">
+                      <svg className="h-4 w-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                      </svg>
+                      Yêu cầu đã được gửi thành công!
+                    </div>
+                    Hướng dẫn đặt lại mật khẩu đã được gửi đến <strong className="font-semibold text-emerald-950">{forgotEmail}</strong>.
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                    <p className="font-semibold text-slate-800 mb-1">💡 Mẹo cho môi trường Test / Dev:</p>
+                    Mật khẩu mặc định của các tài khoản hệ thống là: <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-slate-800 font-bold">Password123@</code> hoặc <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-slate-800 font-bold">Password123!</code>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(false)}
+                    className="w-full cursor-pointer rounded-xl bg-indigo-600 py-2.5 text-xs font-bold text-white shadow-md hover:bg-indigo-700 transition-colors"
+                  >
+                    Quay lại Đăng nhập
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
