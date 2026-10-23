@@ -32,6 +32,8 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const knownIdsRef = useRef<Set<string>>(new Set());
+  const initialLoadedRef = useRef<boolean>(false);
 
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
@@ -40,8 +42,11 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
       const res = await fetch('/api/notifications');
       if (res.ok) {
         const data = await res.json();
-        setNotifications(data.notifications || []);
+        const list: NotificationItem[] = data.notifications || [];
+        setNotifications(list);
         setUnreadCount(data.unreadCount || 0);
+        list.forEach((n) => knownIdsRef.current.add(n.id));
+        initialLoadedRef.current = true;
       }
     } catch (err) {
       console.error('Error fetching notifications:', err);
@@ -60,7 +65,28 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
           const res = await fetch('/api/notifications');
           if (res.ok) {
             const data = await res.json();
-            setNotifications(data.notifications || []);
+            const list: NotificationItem[] = data.notifications || [];
+            
+            // Trigger desktop notification for any newly received unread notification
+            if (initialLoadedRef.current) {
+              list.forEach((item) => {
+                if (!knownIdsRef.current.has(item.id) && !item.read) {
+                  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+                    try {
+                      new Notification(item.title, {
+                        body: item.content,
+                        icon: '/favicon.ico',
+                      });
+                    } catch {
+                      // ignore
+                    }
+                  }
+                }
+              });
+            }
+
+            list.forEach((n) => knownIdsRef.current.add(n.id));
+            setNotifications(list);
             setUnreadCount(data.unreadCount || 0);
           }
         } catch {
@@ -94,11 +120,28 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
     return unsubscribe;
   }, [userId]);
 
-  // Request browser notification permission once
+  const [hasDesktopPermission, setHasDesktopPermission] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setHasDesktopPermission(Notification.permission === 'granted');
+    }
+  }, []);
+
+  // Request browser desktop notification permission
   const requestDesktopPermission = async () => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        await Notification.requestPermission();
+      try {
+        const permission = await Notification.requestPermission();
+        setHasDesktopPermission(permission === 'granted');
+        if (permission === 'granted') {
+          new Notification('TaskFlow Push Alerts Enabled!', {
+            body: 'You will now receive live desktop alerts for tasks and team invitations.',
+            icon: '/favicon.ico',
+          });
+        }
+      } catch (err) {
+        console.error('Failed to request notification permission:', err);
       }
     }
   };
@@ -255,7 +298,25 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
             )}
           </div>
 
+          {/* Desktop Push Notification Permission Banner (Bonus Feature) */}
+          {!hasDesktopPermission && (
+            <div className="flex items-center justify-between gap-3 border-b border-indigo-100 bg-indigo-50/80 px-5 py-2.5 text-xs animate-in fade-in">
+              <div className="flex items-center gap-2 text-indigo-950 font-semibold">
+                <Bell className="h-4 w-4 text-indigo-600 shrink-0" />
+                <span>Enable Browser Push Notifications</span>
+              </div>
+              <button
+                type="button"
+                onClick={requestDesktopPermission}
+                className="cursor-pointer rounded-lg bg-indigo-600 hover:bg-indigo-700 px-3 py-1 text-[11px] font-bold text-white shadow-2xs transition-colors"
+              >
+                Enable
+              </button>
+            </div>
+          )}
+
           {/* Notifications List */}
+
           <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
             {loading && notifications.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-400">Loading notifications...</div>

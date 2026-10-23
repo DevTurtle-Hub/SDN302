@@ -48,13 +48,20 @@ export default function TeamActivity({ teamId }: { teamId: string }) {
 
   useEffect(() => {
     fetchActivities();
+    const interval = setInterval(() => {
+      fetchActivities();
+    }, 5000);
+    return () => clearInterval(interval);
   }, [fetchActivities]);
 
   // Real-time listener for incoming activities (Pusher / SSE)
   useEffect(() => {
     const unsubscribe = subscribeToTeamChannel(teamId, {
       'activity:created': (newAct: ActivityItem) => {
-        setActivities((prev) => [newAct, ...prev]);
+        setActivities((prev) => {
+          if (prev.some((a) => a.id === newAct.id)) return prev;
+          return [newAct, ...prev];
+        });
       },
     });
 

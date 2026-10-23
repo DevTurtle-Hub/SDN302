@@ -1229,8 +1229,24 @@ export default function TeamDetailPage({
         <TeamChat
           teamId={id}
           currentUser={user}
-          teamMembers={team.members.map((m) => ({ userId: m.userId, role: m.role }))}
+          teamMembers={[
+            {
+              userId: team.ownerId,
+              role: 'OWNER',
+              name: team.owner.name,
+              email: team.owner.email,
+            },
+            ...team.members
+              .filter((m) => m.userId !== team.ownerId)
+              .map((m) => ({
+                userId: m.userId,
+                role: m.role,
+                name: m.user.name,
+                email: m.user.email,
+              })),
+          ]}
         />
+
       )}
 
       {/* ======================= TAB: MEMBERS & ROLES ======================= */}
