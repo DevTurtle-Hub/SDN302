@@ -179,10 +179,11 @@ export async function PUT(
           'Task Assigned',
           `${user.name} assigned you to task "${updatedTask.title}" in team "${existingTask.team?.name}".`,
           'TASK_ASSIGNED',
-          `/teams/${existingTask.teamId}`,
+          `/teams/${existingTask.teamId}?taskId=${updatedTask.id}`,
         ).catch(() => {});
       }
     }
+
 
     return NextResponse.json(updatedTask, { status: 200 });
   } catch (error) {

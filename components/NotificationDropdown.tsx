@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { subscribeToUserChannel } from '@/lib/realtime-client';
 import {
   Bell,
@@ -26,6 +26,7 @@ interface NotificationItem {
 }
 
 export default function NotificationDropdown({ userId }: { userId?: string }) {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -146,6 +147,29 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
     }
   };
 
+  // Handle clicking anywhere on the notification or "View Details"
+  const handleNotificationClick = (notif: NotificationItem, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!notif.read) {
+      markAsRead(notif.id);
+    }
+
+    setIsOpen(false);
+
+    if (notif.link) {
+      router.push(notif.link);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('notification:navigate', {
+            detail: { link: notif.link },
+          }),
+        );
+      }
+    }
+  };
+
   const getIconForType = (type: string) => {
     switch (type) {
       case 'TASK_ASSIGNED':
@@ -249,10 +273,8 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
               notifications.map((notif) => (
                 <div
                   key={notif.id}
-                  onClick={() => {
-                    if (!notif.read) markAsRead(notif.id);
-                  }}
-                  className={`flex items-start gap-3.5 p-4 transition-colors cursor-pointer ${
+                  onClick={(e) => handleNotificationClick(notif, e)}
+                  className={`group flex items-start gap-3.5 p-4 transition-colors cursor-pointer ${
                     notif.read ? 'bg-white hover:bg-slate-50' : 'bg-indigo-50/40 hover:bg-indigo-50/70'
                   }`}
                 >
@@ -260,7 +282,7 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1">
-                      <p className={`text-xs font-bold truncate ${notif.read ? 'text-slate-700' : 'text-slate-900'}`}>
+                      <p className={`text-xs font-bold truncate ${notif.read ? 'text-slate-700' : 'text-slate-900 group-hover:text-indigo-600'}`}>
                         {notif.title}
                       </p>
                       <span className="flex items-center gap-1 text-[10px] text-slate-400 whitespace-nowrap">
@@ -275,22 +297,24 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
 
                     <div className="mt-2.5 flex items-center justify-between">
                       {notif.link ? (
-                        <Link
-                          href={notif.link}
-                          onClick={() => setIsOpen(false)}
-                          className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:underline"
+                        <span
+                          className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 group-hover:text-indigo-800 group-hover:underline"
                         >
                           <span>View Details</span>
-                          <ArrowRight className="h-3 w-3" />
-                        </Link>
+                          <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                        </span>
                       ) : (
                         <span />
                       )}
 
                       {!notif.read && (
                         <button
-                          onClick={(e) => markAsRead(notif.id, e)}
-                          className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-indigo-600 font-semibold"
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            markAsRead(notif.id, e);
+                          }}
+                          className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-indigo-600 font-semibold cursor-pointer"
                         >
                           <Check className="h-3 w-3" />
                           Mark read
@@ -300,6 +324,7 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
                   </div>
                 </div>
               ))
+
             )}
           </div>
         </div>

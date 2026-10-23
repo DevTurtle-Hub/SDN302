@@ -172,10 +172,11 @@ export async function POST(request: Request) {
           'Task Assigned',
           `${user.name} assigned you to task "${task.title}".`,
           'TASK_ASSIGNED',
-          `/teams/${task.teamId}`,
+          `/teams/${task.teamId}?taskId=${task.id}`,
         ).catch(() => {});
       }
     }
+
 
     return NextResponse.json(task, { status: 201 });
   } catch (error) {

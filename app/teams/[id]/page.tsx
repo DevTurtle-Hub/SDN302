@@ -115,6 +115,7 @@ export default function TeamDetailPage({
   const [savingTask, setSavingTask] = useState(false);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [taskModalError, setTaskModalError] = useState<string | null>(null);
+  const [isTaskReadOnly, setIsTaskReadOnly] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -432,22 +433,75 @@ export default function TeamDetailPage({
     setShowTaskModal(true);
   };
 
-  // Open Task Modal for Edit
-  const handleOpenEditTask = (task: TaskItem) => {
-    if (!canEditTask(task)) {
-      alert('You can only edit tasks you created or are assigned to, unless you are an Owner or Admin.');
-      return;
+  // Open Task Modal for Edit (or View Only if user cannot edit)
+  const handleOpenEditTask = useCallback(
+    (task: TaskItem) => {
+      const userCanEdit = canEditTask(task);
+      setIsTaskReadOnly(!userCanEdit);
+      setEditingTask(task);
+      setTaskTitle(task.title);
+      setTaskDescription(task.description || '');
+      setTaskStatus(task.status);
+      setTaskPriority(task.priority);
+      setTaskDueDate(task.dueDate ? task.dueDate.substring(0, 10) : '');
+      setTaskAssigneeId(task.assigneeId || '');
+      setTaskModalError(null);
+      setShowTaskModal(true);
+    },
+    [canEditTask],
+  );
+
+  // Open and highlight task by ID (from URL query param or notification click)
+  const openTaskById = useCallback(
+    (taskId: string) => {
+      if (!team) return;
+      const target = team.tasks.find((t) => t.id === taskId);
+      if (target) {
+        setActiveTab('tasks');
+        handleOpenEditTask(target);
+        setTimeout(() => {
+          const el = document.getElementById(`task-${taskId}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('ring-4', 'ring-indigo-500/50');
+            setTimeout(() => {
+              el.classList.remove('ring-4', 'ring-indigo-500/50');
+            }, 3000);
+          }
+        }, 150);
+      }
+    },
+    [team, handleOpenEditTask],
+  );
+
+  // Automatically open task if taskId is present in URL search params
+  useEffect(() => {
+    if (!team || team.tasks.length === 0) return;
+    if (typeof window === 'undefined') return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetTaskId = urlParams.get('taskId');
+    if (targetTaskId) {
+      openTaskById(targetTaskId);
     }
-    setEditingTask(task);
-    setTaskTitle(task.title);
-    setTaskDescription(task.description || '');
-    setTaskStatus(task.status);
-    setTaskPriority(task.priority);
-    setTaskDueDate(task.dueDate ? task.dueDate.substring(0, 10) : '');
-    setTaskAssigneeId(task.assigneeId || '');
-    setTaskModalError(null);
-    setShowTaskModal(true);
-  };
+  }, [team, openTaskById]);
+
+  // Listen to notification navigate custom events while already on the page
+  useEffect(() => {
+    const handleNavEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ link: string }>;
+      const link = customEvent.detail?.link;
+      if (link && link.includes('taskId=')) {
+        const match = link.match(/taskId=([^&]+)/);
+        if (match && match[1]) {
+          openTaskById(match[1]);
+        }
+      }
+    };
+
+    window.addEventListener('notification:navigate', handleNavEvent);
+    return () => window.removeEventListener('notification:navigate', handleNavEvent);
+  }, [openTaskById]);
+
 
   // Quick move Kanban column status
   const handleQuickStatusChange = async (task: TaskItem, newStatus: 'TODO' | 'IN_PROGRESS' | 'DONE') => {
@@ -922,7 +976,8 @@ export default function TeamDetailPage({
                   return (
                     <div
                       key={task.id}
-                      className="flex flex-col justify-between gap-4 p-5 sm:flex-row sm:items-center hover:bg-slate-50/70 transition-colors"
+                      id={`task-${task.id}`}
+                      className="flex flex-col justify-between gap-4 p-5 sm:flex-row sm:items-center hover:bg-slate-50/70 transition-all rounded-xl"
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-1.5">
@@ -954,15 +1009,16 @@ export default function TeamDetailPage({
 
                           {task.dueDate && (
                             <span className="flex items-center gap-1 text-[11px] text-slate-500">
-                              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
+                              <Calendar className="h-3 w-3 text-slate-400" />
                               Due {new Date(task.dueDate).toLocaleDateString()}
                             </span>
                           )}
                         </div>
 
-                        <h3 className="text-base font-bold text-slate-900 truncate">
+                        <h3
+                          onClick={() => handleOpenEditTask(task)}
+                          className="text-base font-bold text-slate-900 truncate hover:text-indigo-600 cursor-pointer transition-colors"
+                        >
                           {task.title}
                         </h3>
 
@@ -991,14 +1047,12 @@ export default function TeamDetailPage({
 
                       {/* Action buttons */}
                       <div className="flex shrink-0 items-center gap-2 self-end sm:self-center">
-                        {editable && (
-                          <button
-                            onClick={() => handleOpenEditTask(task)}
-                            className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
-                          >
-                            Edit
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handleOpenEditTask(task)}
+                          className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
+                        >
+                          {editable ? 'Edit' : 'View Details'}
+                        </button>
                         {deletable && (
                           <button
                             onClick={() => handleDeleteTask(task)}
@@ -1011,6 +1065,7 @@ export default function TeamDetailPage({
                       </div>
                     </div>
                   );
+
                 })}
               </div>
             </div>
@@ -1066,7 +1121,8 @@ export default function TeamDetailPage({
                         return (
                           <div
                             key={task.id}
-                            className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs hover:shadow-xs transition-shadow"
+                            id={`task-${task.id}`}
+                            className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs hover:shadow-xs transition-all"
                           >
                             <div className="flex items-center justify-between gap-1 mb-2">
                               <span
@@ -1088,7 +1144,10 @@ export default function TeamDetailPage({
                               )}
                             </div>
 
-                            <h5 className="text-sm font-bold text-slate-900 line-clamp-2">
+                            <h5
+                              onClick={() => handleOpenEditTask(task)}
+                              className="text-sm font-bold text-slate-900 line-clamp-2 hover:text-indigo-600 cursor-pointer transition-colors"
+                            >
                               {task.title}
                             </h5>
 
@@ -1135,14 +1194,12 @@ export default function TeamDetailPage({
                               </span>
 
                               <div className="flex items-center gap-1.5">
-                                {editable && (
-                                  <button
-                                    onClick={() => handleOpenEditTask(task)}
-                                    className="cursor-pointer text-indigo-600 hover:text-indigo-800 font-bold"
-                                  >
-                                    Edit
-                                  </button>
-                                )}
+                                <button
+                                  onClick={() => handleOpenEditTask(task)}
+                                  className="cursor-pointer text-indigo-600 hover:text-indigo-800 font-bold"
+                                >
+                                  {editable ? 'Edit' : 'View'}
+                                </button>
                                 {deletable && (
                                   <button
                                     onClick={() => handleDeleteTask(task)}
@@ -1155,6 +1212,7 @@ export default function TeamDetailPage({
                               </div>
                             </div>
                           </div>
+
                         );
                       })}
                     </div>
@@ -1367,7 +1425,11 @@ export default function TeamDetailPage({
           <div className="w-full max-w-2xl rounded-3xl bg-white p-8 sm:p-10 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-black text-slate-900">
-                {editingTask ? 'Edit Task Details' : 'Create New Task'}
+                {editingTask
+                  ? isTaskReadOnly
+                    ? 'Task Details (View Only)'
+                    : 'Edit Task Details'
+                  : 'Create New Task'}
               </h3>
               <button
                 onClick={() => setShowTaskModal(false)}
@@ -1391,10 +1453,11 @@ export default function TeamDetailPage({
                 <input
                   type="text"
                   required
+                  disabled={isTaskReadOnly}
                   value={taskTitle}
                   onChange={(e) => setTaskTitle(e.target.value)}
                   placeholder="Task title..."
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-100 disabled:text-slate-600"
                 />
               </div>
 
@@ -1404,10 +1467,11 @@ export default function TeamDetailPage({
                 </label>
                 <textarea
                   rows={3}
+                  disabled={isTaskReadOnly}
                   value={taskDescription}
                   onChange={(e) => setTaskDescription(e.target.value)}
                   placeholder="Task specification, details, and acceptance criteria..."
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none disabled:bg-slate-100 disabled:text-slate-600"
                 />
               </div>
 
@@ -1417,11 +1481,12 @@ export default function TeamDetailPage({
                     Status
                   </label>
                   <select
+                    disabled={isTaskReadOnly}
                     value={taskStatus}
                     onChange={(e) =>
                       setTaskStatus(e.target.value as 'TODO' | 'IN_PROGRESS' | 'DONE')
                     }
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:outline-none disabled:bg-slate-100"
                   >
                     <option value="TODO">To Do</option>
                     <option value="IN_PROGRESS">In Progress</option>
@@ -1434,11 +1499,12 @@ export default function TeamDetailPage({
                     Priority
                   </label>
                   <select
+                    disabled={isTaskReadOnly}
                     value={taskPriority}
                     onChange={(e) =>
                       setTaskPriority(e.target.value as 'LOW' | 'MEDIUM' | 'HIGH')
                     }
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:outline-none disabled:bg-slate-100"
                   >
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
@@ -1453,9 +1519,10 @@ export default function TeamDetailPage({
                     Assignee
                   </label>
                   <select
+                    disabled={isTaskReadOnly}
                     value={taskAssigneeId}
                     onChange={(e) => setTaskAssigneeId(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:outline-none disabled:bg-slate-100"
                   >
                     <option value="">Unassigned</option>
                     {team.members.map((m) => (
@@ -1472,9 +1539,10 @@ export default function TeamDetailPage({
                   </label>
                   <input
                     type="date"
+                    disabled={isTaskReadOnly}
                     value={taskDueDate}
                     onChange={(e) => setTaskDueDate(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:outline-none disabled:bg-slate-100"
                   />
                 </div>
               </div>
@@ -1485,21 +1553,24 @@ export default function TeamDetailPage({
                   onClick={() => setShowTaskModal(false)}
                   className="cursor-pointer rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
                 >
-                  Cancel
+                  {isTaskReadOnly ? 'Close' : 'Cancel'}
                 </button>
-                <button
-                  type="submit"
-                  disabled={savingTask}
-                  className="cursor-pointer rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-5 py-2 text-xs font-bold text-white shadow-md hover:opacity-95 transition-all disabled:opacity-50"
-                >
-                  {savingTask
-                    ? 'Saving...'
-                    : editingTask
-                      ? 'Update Task'
-                      : 'Create Task'}
-                </button>
+                {!isTaskReadOnly && (
+                  <button
+                    type="submit"
+                    disabled={savingTask}
+                    className="cursor-pointer rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-5 py-2 text-xs font-bold text-white shadow-md hover:opacity-95 transition-all disabled:opacity-50"
+                  >
+                    {savingTask
+                      ? 'Saving...'
+                      : editingTask
+                        ? 'Update Task'
+                        : 'Create Task'}
+                  </button>
+                )}
               </div>
             </form>
+
           </div>
         </div>
       )}

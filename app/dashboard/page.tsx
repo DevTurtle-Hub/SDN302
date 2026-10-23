@@ -471,9 +471,19 @@ export default function DashboardPage() {
                     >
                       <div className="space-y-2 min-w-0 flex-1">
                         <div className="flex items-center gap-2.5 flex-wrap">
-                          <span className="text-base font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                            {task.title}
-                          </span>
+                          {task.team ? (
+                            <Link
+                              href={`/teams/${task.team.id}?taskId=${task.id}`}
+                              className="text-base font-bold text-slate-900 hover:text-indigo-600 transition-colors cursor-pointer"
+                            >
+                              {task.title}
+                            </Link>
+                          ) : (
+                            <span className="text-base font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                              {task.title}
+                            </span>
+                          )}
+
 
                           {/* Priority Pill */}
                           <span
