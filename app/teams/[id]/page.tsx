@@ -156,6 +156,15 @@ export default function TeamDetailPage({
     }
   }, [user, id, fetchTeamDetails]);
 
+  // Background auto-sync every 3s (ensures multi-user updates on Vercel without manual refresh)
+  useEffect(() => {
+    if (!user || !id) return;
+    const interval = setInterval(() => {
+      fetchTeamDetails(false);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [user, id, fetchTeamDetails]);
+
   // ======================= REAL-TIME COLLABORATION SUBSCRIPTION (Pusher / SSE) =======================
   useEffect(() => {
     if (!id || !user) return;

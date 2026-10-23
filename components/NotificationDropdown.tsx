@@ -52,6 +52,22 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
   useEffect(() => {
     if (userId) {
       fetchNotifications();
+
+      // Silent background poll every 4s
+      const interval = setInterval(async () => {
+        try {
+          const res = await fetch('/api/notifications');
+          if (res.ok) {
+            const data = await res.json();
+            setNotifications(data.notifications || []);
+            setUnreadCount(data.unreadCount || 0);
+          }
+        } catch {
+          // ignore
+        }
+      }, 4000);
+
+      return () => clearInterval(interval);
     }
   }, [userId, fetchNotifications]);
 

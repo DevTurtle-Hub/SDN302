@@ -11,7 +11,6 @@ import {
   Shield,
   User,
   X,
-  Wifi,
 } from 'lucide-react';
 
 export interface ChatMessage {
@@ -54,30 +53,40 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTypingSentRef = useRef<number>(0);
 
   const scrollToBottom = (smooth = true) => {
     messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
   };
 
   // 1. Fetch message history
-  const fetchMessages = useCallback(async () => {
+  const fetchMessages = useCallback(async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const res = await fetch(`/api/teams/${teamId}/messages`);
       if (res.ok) {
-        const data = await res.json();
-        setMessages(data || []);
-        setTimeout(() => scrollToBottom(false), 100);
+        const data: ChatMessage[] = await res.json();
+        setMessages((prev) => {
+          // If message count or last message changed, update and scroll
+          if (
+            data.length !== prev.length ||
+            data[data.length - 1]?.id !== prev[prev.length - 1]?.id
+          ) {
+            setTimeout(() => scrollToBottom(true), 50);
+            return data;
+          }
+          return prev;
+        });
       }
     } catch (err) {
       console.error('Error fetching chat messages:', err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, [teamId]);
 
   useEffect(() => {
-    fetchMessages();
+    fetchMessages(true);
   }, [fetchMessages]);
 
   // 2. Real-time Subscription (Pusher with SSE fallback)
@@ -87,7 +96,20 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
       {
         'message:created': (newMsg: ChatMessage) => {
           setMessages((prev) => {
+            // Check if already in list (or matches optimistic temp message)
             if (prev.some((m) => m.id === newMsg.id)) return prev;
+            // If there's an optimistic temp message with same content and sender from last 5s, replace it
+            const tempIndex = prev.findIndex(
+              (m) =>
+                m.id.startsWith('temp-') &&
+                m.senderId === newMsg.senderId &&
+                m.content === newMsg.content,
+            );
+            if (tempIndex !== -1) {
+              const updated = [...prev];
+              updated[tempIndex] = newMsg;
+              return updated;
+            }
             return [...prev, newMsg];
           });
           setTypingUsers((prev) => {
@@ -116,18 +138,51 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
     return unsubscribe;
   }, [teamId, currentUser.id]);
 
-  // Broadcast typing status
+  // 3. Smart Background Auto-Sync Poller (Every 2.5s for seamless multi-user sync on Vercel)
+  useEffect(() => {
+    let isMounted = true;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/teams/${teamId}/messages`);
+        if (res.ok && isMounted) {
+          const latest: ChatMessage[] = await res.json();
+          setMessages((prev) => {
+            // Check if any new message exists
+            if (
+              latest.length !== prev.length ||
+              latest[latest.length - 1]?.id !== prev[prev.length - 1]?.id
+            ) {
+              setTimeout(() => scrollToBottom(true), 50);
+              return latest;
+            }
+            return prev;
+          });
+        }
+      } catch {
+        // silent background poll error
+      }
+    }, 2500);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [teamId]);
+
+  // Broadcast typing status with 2-second throttle (avoids lag on every keystroke)
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputText(e.target.value);
 
-    // Broadcast isTyping = true
-    fetch(`/api/teams/${teamId}/typing`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isTyping: true }),
-    }).catch(() => {});
+    const now = Date.now();
+    if (now - lastTypingSentRef.current > 2000) {
+      lastTypingSentRef.current = now;
+      fetch(`/api/teams/${teamId}/typing`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isTyping: true }),
+      }).catch(() => {});
+    }
 
-    // Clear timeout and schedule isTyping = false
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
@@ -140,33 +195,65 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
     }, 2500);
   };
 
-  // Send message
+  // Send message with OPTIMISTIC UI (0ms delay, buttery smooth sending)
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    const content = inputText.trim();
-    if (!content && !attachmentUrl) return;
+    const contentToSend = inputText.trim();
+    const urlToSend = attachmentUrl.trim();
+    if (!contentToSend && !urlToSend) return;
 
+    // 1. Immediately reset form
+    setInputText('');
+    setAttachmentUrl('');
+    setShowAttachmentInput(false);
+
+    // 2. Add optimistic message to UI immediately (0ms latency!)
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMsg: ChatMessage = {
+      id: tempId,
+      content: contentToSend || 'Shared an image attachment',
+      teamId,
+      senderId: currentUser.id,
+      fileUrl: urlToSend || null,
+      fileName: null,
+      createdAt: new Date().toISOString(),
+      sender: {
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email,
+      },
+    };
+
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setTimeout(() => scrollToBottom(true), 20);
+
+    // 3. Send request in background
     setSending(true);
     try {
       const res = await fetch(`/api/teams/${teamId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          content: content || 'Shared an image attachment',
-          fileUrl: attachmentUrl || null,
+          content: contentToSend || 'Shared an image attachment',
+          fileUrl: urlToSend || null,
         }),
       });
 
       if (res.ok) {
-        setInputText('');
-        setAttachmentUrl('');
-        setShowAttachmentInput(false);
+        const savedMsg: ChatMessage = await res.json();
+        // Replace temp optimistic message with actual persisted record
+        setMessages((prev) =>
+          prev.map((m) => (m.id === tempId ? savedMsg : m)),
+        );
       } else {
+        // Rollback on error
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
         const data = await res.json();
         alert(data.error || 'Failed to send message');
       }
     } catch (err) {
       console.error('Error sending message:', err);
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
       alert('Error sending message. Please try again.');
     } finally {
       setSending(false);
@@ -362,7 +449,7 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
         </div>
       )}
 
-      {/* Message Input Box - Wide & Clear */}
+      {/* Message Input Box - Wide & Smooth */}
       <form
         onSubmit={handleSendMessage}
         className="flex items-center gap-3 border-t border-slate-200 bg-white p-4"
@@ -393,7 +480,7 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
         {/* Send Button */}
         <button
           type="submit"
-          disabled={sending || (!inputText.trim() && !attachmentUrl)}
+          disabled={!inputText.trim() && !attachmentUrl}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 transition-all active:scale-95 disabled:opacity-40 cursor-pointer"
           title="Send message"
         >
