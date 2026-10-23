@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/auth';
 import { TaskPriority, TaskStatus } from '@prisma/client';
+import { broadcastToTeam, recordActivity, sendNotification } from '@/lib/realtime';
 
 const validStatuses = Object.values(TaskStatus);
 const validPriorities = Object.values(TaskPriority);
@@ -155,6 +156,26 @@ export async function POST(request: Request) {
         },
       },
     });
+
+    if (task.teamId) {
+      await broadcastToTeam(task.teamId, 'task:created', task);
+      recordActivity(
+        task.teamId,
+        user.id,
+        'CREATED_TASK',
+        `Created task "${task.title}"`,
+      ).catch(() => {});
+
+      if (task.assigneeId && task.assigneeId !== user.id) {
+        sendNotification(
+          task.assigneeId,
+          'Task Assigned',
+          `${user.name} assigned you to task "${task.title}".`,
+          'TASK_ASSIGNED',
+          `/teams/${task.teamId}`,
+        ).catch(() => {});
+      }
+    }
 
     return NextResponse.json(task, { status: 201 });
   } catch (error) {

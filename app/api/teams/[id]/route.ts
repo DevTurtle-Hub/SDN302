@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/auth';
+import { broadcastToTeam, recordActivity } from '@/lib/realtime';
+
+interface RouteContext {
+  params: Promise<{ id: string }>;
+}
 
 // GET /api/teams/[id] - Get team details, including members and tasks
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(request: Request, context: RouteContext) {
   try {
     const user = await getAuthUser(request);
     if (!user) {
@@ -16,7 +18,7 @@ export async function GET(
       );
     }
 
-    const { id } = await params;
+    const { id } = await context.params;
 
     const team = await prisma.team.findUnique({
       where: { id },
@@ -76,11 +78,8 @@ export async function GET(
   }
 }
 
-// PUT /api/teams/[id] - Update team info (Owner only)
-export async function PUT(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+// PUT /api/teams/[id] - Update team info (Owner & Admin)
+export async function PUT(request: Request, context: RouteContext) {
   try {
     const user = await getAuthUser(request);
     if (!user) {
@@ -90,10 +89,11 @@ export async function PUT(
       );
     }
 
-    const { id } = await params;
+    const { id } = await context.params;
 
     const team = await prisma.team.findUnique({
       where: { id },
+      include: { members: true },
     });
 
     if (!team) {
@@ -103,10 +103,13 @@ export async function PUT(
       );
     }
 
-    // Only owner can update team details
-    if (team.ownerId !== user.id) {
+    const isOwner = team.ownerId === user.id;
+    const membership = team.members.find((m) => m.userId === user.id);
+    const isAdmin = membership?.role === 'ADMIN';
+
+    if (!isOwner && !isAdmin) {
       return NextResponse.json(
-        { error: 'Forbidden. Only the team Owner can update team details.' },
+        { error: 'Forbidden. Only the Team Owner or Admins can update team details.' },
         { status: 403 },
       );
     }
@@ -152,6 +155,14 @@ export async function PUT(
       },
     });
 
+    await broadcastToTeam(id, 'team:updated', updatedTeam);
+    recordActivity(
+      id,
+      user.id,
+      'UPDATED_TEAM',
+      `Updated team details`,
+    ).catch(() => {});
+
     return NextResponse.json(updatedTeam, { status: 200 });
   } catch (error) {
     console.error('Error updating team:', error);
@@ -163,10 +174,7 @@ export async function PUT(
 }
 
 // DELETE /api/teams/[id] - Delete a team (Owner only)
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function DELETE(request: Request, context: RouteContext) {
   try {
     const user = await getAuthUser(request);
     if (!user) {
@@ -176,7 +184,7 @@ export async function DELETE(
       );
     }
 
-    const { id } = await params;
+    const { id } = await context.params;
 
     const team = await prisma.team.findUnique({
       where: { id },
@@ -189,7 +197,7 @@ export async function DELETE(
       );
     }
 
-    // Only owner can delete team
+    // Only owner can delete team (strictly enforced)
     if (team.ownerId !== user.id) {
       return NextResponse.json(
         { error: 'Forbidden. Only the team Owner can delete this team.' },

@@ -4,6 +4,9 @@ import { useEffect, useState, useMemo, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import TeamChat from '@/components/TeamChat';
+import TeamActivity from '@/components/TeamActivity';
+import { subscribeToTeamChannel } from '@/lib/realtime-client';
 
 interface Member {
   id: string;
@@ -55,17 +58,19 @@ export default function TeamDetailPage({
   const [allUserTeams, setAllUserTeams] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'tasks' | 'members'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'chat' | 'members' | 'activity'>('tasks');
 
   // Search & Filters for Tasks
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
-  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
 
   // Member management state
   const [addMemberEmail, setAddMemberEmail] = useState('');
+  const [addMemberRole, setAddMemberRole] = useState<'MEMBER' | 'ADMIN'>('MEMBER');
   const [addingMember, setAddingMember] = useState(false);
+  const [updatingRoleUserId, setUpdatingRoleUserId] = useState<string | null>(null);
   const [memberActionError, setMemberActionError] = useState<string | null>(null);
   const [memberActionSuccess, setMemberActionSuccess] = useState<string | null>(null);
 
@@ -128,7 +133,117 @@ export default function TeamDetailPage({
     }
   }, [user, id, fetchTeamDetails]);
 
+  // ======================= REAL-TIME COLLABORATION SUBSCRIPTION (Pusher / SSE) =======================
+  useEffect(() => {
+    if (!id || !user) return;
+
+    const unsubscribe = subscribeToTeamChannel(id, {
+      'task:created': (newTask: TaskItem) => {
+        setTeam((prev) => {
+          if (!prev) return prev;
+          if (prev.tasks.some((t) => t.id === newTask.id)) return prev;
+          return {
+            ...prev,
+            tasks: [newTask, ...prev.tasks],
+          };
+        });
+      },
+      'task:updated': (updatedTask: TaskItem) => {
+        setTeam((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            tasks: prev.tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t)),
+          };
+        });
+      },
+      'task:deleted': ({ id: deletedId }: { id: string }) => {
+        setTeam((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            tasks: prev.tasks.filter((t) => t.id !== deletedId),
+          };
+        });
+      },
+      'member:added': (newMember: Member) => {
+        setTeam((prev) => {
+          if (!prev) return prev;
+          if (prev.members.some((m) => m.id === newMember.id)) return prev;
+          return {
+            ...prev,
+            members: [...prev.members, newMember],
+          };
+        });
+      },
+      'member:updated': (updatedMember: Member) => {
+        setTeam((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            members: prev.members.map((m) =>
+              m.userId === updatedMember.userId ? updatedMember : m,
+            ),
+          };
+        });
+      },
+      'member:removed': ({ userId: removedUserId }: { userId: string }) => {
+        setTeam((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            members: prev.members.filter((m) => m.userId !== removedUserId),
+          };
+        });
+      },
+      'team:updated': (updatedTeam: Partial<TeamDetail>) => {
+        setTeam((prev) =>
+          prev
+            ? {
+                ...prev,
+                name: updatedTeam.name || prev.name,
+                description: updatedTeam.description !== undefined ? updatedTeam.description : prev.description,
+              }
+            : prev,
+        );
+      },
+    });
+
+    return unsubscribe;
+  }, [id, user]);
+
+  // ======================= ROLE CALCULATIONS (RBAC) =======================
+  const currentUserMembership = useMemo(() => {
+    if (!team || !user) return null;
+    return team.members.find((m) => m.userId === user.id) || null;
+  }, [team, user]);
+
   const isOwner = Boolean(user && team && team.ownerId === user.id);
+  const isAdmin = Boolean(!isOwner && currentUserMembership?.role === 'ADMIN');
+  const isMember = Boolean(!isOwner && !isAdmin);
+
+  const canManageMembers = isOwner || isAdmin;
+  const canManageAllTasks = isOwner || isAdmin;
+  const canEditTeam = isOwner || isAdmin;
+  const canDeleteTeam = isOwner; // strictly owner only
+
+  const canEditTask = useCallback(
+    (task: TaskItem) => {
+      if (!user) return false;
+      if (canManageAllTasks) return true;
+      return task.creatorId === user.id || task.assigneeId === user.id;
+    },
+    [user, canManageAllTasks],
+  );
+
+  const canDeleteTask = useCallback(
+    (task: TaskItem) => {
+      if (!user) return false;
+      if (canManageAllTasks) return true;
+      return task.creatorId === user.id || task.assigneeId === user.id;
+    },
+    [user, canManageAllTasks],
+  );
 
   // Handle Edit Team info
   const handleUpdateTeam = async (e: React.FormEvent) => {
@@ -154,10 +269,15 @@ export default function TeamDetailPage({
     }
   };
 
-  // Handle Delete Team
+  // Handle Delete Team (Owner only)
   const handleDeleteTeam = async () => {
+    if (!isOwner) {
+      alert('Only the Team Owner can delete this workspace.');
+      return;
+    }
+
     const confirmed = window.confirm(
-      'Are you sure you want to delete this team? All associated members and tasks will be removed permanently.',
+      'Are you sure you want to delete this team? All associated tasks, members, and chat history will be permanently deleted.',
     );
     if (!confirmed) return;
 
@@ -173,7 +293,7 @@ export default function TeamDetailPage({
     }
   };
 
-  // Add Member by Email
+  // Add Member by Email with Role
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
     setMemberActionError(null);
@@ -184,18 +304,55 @@ export default function TeamDetailPage({
       const res = await fetch(`/api/teams/${id}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: addMemberEmail }),
+        body: JSON.stringify({
+          email: addMemberEmail,
+          role: addMemberRole,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to add member');
 
-      setMemberActionSuccess(`Member '${data.user.name}' added successfully!`);
+      setMemberActionSuccess(`Member '${data.user.name}' added with role ${data.role}!`);
       setAddMemberEmail('');
+      setAddMemberRole('MEMBER');
       fetchTeamDetails(false);
     } catch (err: unknown) {
       setMemberActionError(err instanceof Error ? err.message : 'Error adding member');
     } finally {
       setAddingMember(false);
+    }
+  };
+
+  // Change Member Role (Owner & Admin)
+  const handleUpdateMemberRole = async (targetUserId: string, targetName: string, newRole: string) => {
+    setMemberActionError(null);
+    setMemberActionSuccess(null);
+    setUpdatingRoleUserId(targetUserId);
+
+    try {
+      const res = await fetch(`/api/teams/${id}/members/${targetUserId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update member role');
+
+      setMemberActionSuccess(`Updated role for ${targetName} to ${newRole}!`);
+      setTeam((prev) =>
+        prev
+          ? {
+              ...prev,
+              members: prev.members.map((m) =>
+                m.userId === targetUserId ? { ...m, role: newRole } : m,
+              ),
+            }
+          : prev,
+      );
+    } catch (err: unknown) {
+      setMemberActionError(err instanceof Error ? err.message : 'Error updating member role');
+    } finally {
+      setUpdatingRoleUserId(null);
     }
   };
 
@@ -217,7 +374,14 @@ export default function TeamDetailPage({
       if (!res.ok) throw new Error(data.error || 'Failed to remove member');
 
       setMemberActionSuccess(`Removed '${memberName}' from team.`);
-      fetchTeamDetails(false);
+      setTeam((prev) =>
+        prev
+          ? {
+              ...prev,
+              members: prev.members.filter((m) => m.userId !== userId),
+            }
+          : prev,
+      );
     } catch (err: unknown) {
       setMemberActionError(err instanceof Error ? err.message : 'Error removing member');
     }
@@ -238,6 +402,10 @@ export default function TeamDetailPage({
 
   // Open Task Modal for Edit
   const handleOpenEditTask = (task: TaskItem) => {
+    if (!canEditTask(task)) {
+      alert('You can only edit tasks you created or are assigned to, unless you are an Owner or Admin.');
+      return;
+    }
     setEditingTask(task);
     setTaskTitle(task.title);
     setTaskDescription(task.description || '');
@@ -247,6 +415,39 @@ export default function TeamDetailPage({
     setTaskAssigneeId(task.assigneeId || '');
     setTaskModalError(null);
     setShowTaskModal(true);
+  };
+
+  // Quick move Kanban column status
+  const handleQuickStatusChange = async (task: TaskItem, newStatus: 'TODO' | 'IN_PROGRESS' | 'DONE') => {
+    if (!canEditTask(task)) {
+      alert('Permission denied. You can only move your own tasks, unless you are an Owner or Admin.');
+      return;
+    }
+
+    // Optimistic UI update
+    setTeam((prev) =>
+      prev
+        ? {
+            ...prev,
+            tasks: prev.tasks.map((t) => (t.id === task.id ? { ...t, status: newStatus } : t)),
+          }
+        : prev,
+    );
+
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to update task status');
+      }
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to update task status');
+      fetchTeamDetails(false);
+    }
   };
 
   // Submit Task (Create or Update)
@@ -266,7 +467,6 @@ export default function TeamDetailPage({
       };
 
       if (editingTask) {
-        // PUT /api/tasks/:id
         const res = await fetch(`/api/tasks/${editingTask.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -275,7 +475,6 @@ export default function TeamDetailPage({
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to update task');
 
-        // Optimistically update task in local state immediately
         setTeam((prev) =>
           prev
             ? {
@@ -285,7 +484,6 @@ export default function TeamDetailPage({
             : prev,
         );
       } else {
-        // POST /api/teams/:id/tasks
         const res = await fetch(`/api/teams/${id}/tasks`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -294,7 +492,6 @@ export default function TeamDetailPage({
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to create task');
 
-        // Optimistically prepend new task to local state immediately
         setTeam((prev) =>
           prev
             ? {
@@ -306,7 +503,6 @@ export default function TeamDetailPage({
       }
 
       setShowTaskModal(false);
-      fetchTeamDetails(false);
     } catch (err: unknown) {
       setTaskModalError(err instanceof Error ? err.message : 'Error saving task');
     } finally {
@@ -318,14 +514,8 @@ export default function TeamDetailPage({
   const handleDeleteTask = async (task: TaskItem) => {
     if (deletingTaskId) return;
 
-    const canDelete =
-      user &&
-      (user.id === task.creatorId ||
-        user.id === task.assigneeId ||
-        user.id === team?.ownerId);
-
-    if (!canDelete) {
-      alert('Only the task creator, the assignee, or the team Owner can delete this task.');
+    if (!canDeleteTask(task)) {
+      alert('Only the task creator, the assignee, or an Owner/Admin can delete this task.');
       return;
     }
 
@@ -341,7 +531,6 @@ export default function TeamDetailPage({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to delete task');
 
-      // Optimistically update task list immediately for fast UI feedback
       setTeam((prev) =>
         prev
           ? {
@@ -350,8 +539,6 @@ export default function TeamDetailPage({
             }
           : prev,
       );
-
-      fetchTeamDetails(false);
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Error deleting task');
       fetchTeamDetails(false);
@@ -439,7 +626,7 @@ export default function TeamDetailPage({
       </div>
 
       {/* Team Header Banner */}
-      <div className="mb-8 rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-xs">
+      <div className="mb-6 rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-xs">
         <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-start">
           <div className="max-w-2xl">
             <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -447,10 +634,12 @@ export default function TeamDetailPage({
                 className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
                   isOwner
                     ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                    : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                    : isAdmin
+                      ? 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+                      : 'bg-slate-100 text-slate-700 border border-slate-200'
                 }`}
               >
-                {isOwner ? 'Workspace Owner' : 'Team Member'}
+                {isOwner ? '👑 Workspace Owner' : isAdmin ? '🛡️ Team Admin' : '👤 Team Member'}
               </span>
               <span className="text-xs text-slate-400">&bull;</span>
               <span className="text-xs text-slate-500 font-medium">
@@ -467,51 +656,109 @@ export default function TeamDetailPage({
             </p>
           </div>
 
-          {/* Action Buttons for Team Owner */}
-          {isOwner && (
-            <div className="flex shrink-0 items-center gap-2">
+          {/* Action Buttons for Owner / Admin */}
+          <div className="flex shrink-0 items-center gap-2">
+            {canEditTeam && (
               <button
                 onClick={() => setShowEditTeamModal(true)}
                 className="cursor-pointer rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 transition-colors"
               >
                 Edit Team
               </button>
+            )}
+            {canDeleteTeam && (
               <button
                 onClick={handleDeleteTeam}
                 className="cursor-pointer rounded-xl border border-red-200 bg-white px-3.5 py-2 text-xs font-bold text-red-600 shadow-xs hover:bg-red-50 transition-colors"
+                title="Only Workspace Owner can delete the team"
               >
                 Delete Team
               </button>
+            )}
+          </div>
+        </div>
+
+        {/* RBAC Role Indicator Banner */}
+        <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-base shadow-2xs border border-slate-200/80">
+                {isOwner ? '👑' : isAdmin ? '🛡️' : '👤'}
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-900">
+                  Your Current Role: <span className="text-indigo-600 uppercase font-black">{isOwner ? 'Owner' : isAdmin ? 'Admin' : 'Member'}</span>
+                </span>
+                <p className="text-[11px] text-slate-500">
+                  {isOwner && 'Full administrative authority: manage members, assign roles, edit all tasks, and delete workspace.'}
+                  {isAdmin && 'Team management authority: add/remove members, promote/demote roles, manage all tasks (cannot delete team).'}
+                  {isMember && 'Collaborator access: create tasks, manage your assigned tasks, participate in live chat & view task boards.'}
+                </p>
+              </div>
             </div>
-          )}
+
+            <div className="flex items-center gap-1.5 self-end sm:self-center">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[11px] font-bold text-emerald-700">Real-time Connected</span>
+            </div>
+          </div>
         </div>
 
         {/* Tab Switcher */}
-        <div className="mt-8 flex border-b border-slate-100 gap-6">
+        <div className="mt-8 flex border-b border-slate-100 gap-6 overflow-x-auto">
           <button
             onClick={() => setActiveTab('tasks')}
-            className={`cursor-pointer pb-3 text-sm font-bold transition-all relative ${
+            className={`cursor-pointer pb-3 text-sm font-bold transition-all relative whitespace-nowrap ${
               activeTab === 'tasks'
                 ? 'text-indigo-600'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            Tasks ({team.tasks.length})
+            📋 Tasks ({team.tasks.length})
             {activeTab === 'tasks' && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-600 to-cyan-500 rounded-full" />
             )}
           </button>
 
           <button
+            onClick={() => setActiveTab('chat')}
+            className={`cursor-pointer pb-3 text-sm font-bold transition-all relative flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'chat'
+                ? 'text-indigo-600'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <span>💬 Team Chat</span>
+            <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            {activeTab === 'chat' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-600 to-cyan-500 rounded-full" />
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveTab('members')}
-            className={`cursor-pointer pb-3 text-sm font-bold transition-all relative ${
+            className={`cursor-pointer pb-3 text-sm font-bold transition-all relative whitespace-nowrap ${
               activeTab === 'members'
                 ? 'text-indigo-600'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            Members ({team.members.length})
+            👥 Members & Roles ({team.members.length})
             {activeTab === 'members' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-600 to-cyan-500 rounded-full" />
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('activity')}
+            className={`cursor-pointer pb-3 text-sm font-bold transition-all relative whitespace-nowrap ${
+              activeTab === 'activity'
+                ? 'text-indigo-600'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            📜 Activity Log
+            {activeTab === 'activity' && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-600 to-cyan-500 rounded-full" />
             )}
           </button>
@@ -539,7 +786,7 @@ export default function TeamDetailPage({
                   placeholder="Search tasks..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 py-2 text-xs text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
               </div>
 
@@ -547,9 +794,9 @@ export default function TeamDetailPage({
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:border-indigo-500 focus:outline-none"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:border-indigo-500 focus:outline-none cursor-pointer"
               >
-                <option value="ALL">All Status</option>
+                <option value="ALL">All Statuses</option>
                 <option value="TODO">To Do</option>
                 <option value="IN_PROGRESS">In Progress</option>
                 <option value="DONE">Done</option>
@@ -559,61 +806,71 @@ export default function TeamDetailPage({
               <select
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value)}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:border-indigo-500 focus:outline-none"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:border-indigo-500 focus:outline-none cursor-pointer"
               >
-                <option value="ALL">All Priority</option>
+                <option value="ALL">All Priorities</option>
                 <option value="LOW">Low</option>
                 <option value="MEDIUM">Medium</option>
                 <option value="HIGH">High</option>
               </select>
+            </div>
 
-              {/* View Toggle */}
-              <div className="flex rounded-xl border border-slate-200 bg-slate-100 p-0.5 text-xs font-semibold">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('list')}
-                  className={`cursor-pointer rounded-lg px-2.5 py-1.5 transition-colors ${
-                    viewMode === 'list'
-                      ? 'bg-white text-indigo-600 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  List
-                </button>
+            <div className="flex items-center gap-2">
+              {/* View Mode Toggle: Kanban vs List */}
+              <div className="flex items-center rounded-xl border border-slate-200 bg-slate-100/80 p-1">
                 <button
                   type="button"
                   onClick={() => setViewMode('kanban')}
-                  className={`cursor-pointer rounded-lg px-2.5 py-1.5 transition-colors ${
+                  className={`cursor-pointer rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
                     viewMode === 'kanban'
-                      ? 'bg-white text-indigo-600 shadow-xs'
+                      ? 'bg-white text-indigo-600 shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   Kanban
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  className={`cursor-pointer rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                    viewMode === 'list'
+                      ? 'bg-white text-indigo-600 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  List
+                </button>
               </div>
-            </div>
 
-            <button
-              onClick={handleOpenCreateTask}
-              className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:opacity-95 transition-all"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
-              </svg>
-              + Create Task
-            </button>
-          </div>
-
-          {/* Task Content: List vs Kanban */}
-          {filteredTasks.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-200 bg-white/60 p-12 text-center">
-              <p className="text-sm font-semibold text-slate-600">No tasks match your criteria</p>
+              {/* Create Task Button */}
               <button
                 onClick={handleOpenCreateTask}
-                className="mt-3 cursor-pointer text-xs font-bold text-indigo-600 hover:text-indigo-700"
+                className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:from-indigo-700 hover:to-cyan-700 transition-all"
               >
-                + Add a task to this team
+                + New Task
+              </button>
+            </div>
+          </div>
+
+          {/* Task Feed */}
+          {filteredTasks.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50/50 p-12 text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+              </div>
+              <h3 className="text-base font-bold text-slate-800">No tasks found</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                {searchQuery || statusFilter !== 'ALL' || priorityFilter !== 'ALL'
+                  ? 'Try adjusting your search criteria or active filters.'
+                  : 'Get started by creating your team’s first sprint task.'}
+              </p>
+              <button
+                onClick={handleOpenCreateTask}
+                className="cursor-pointer mt-4 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 transition-colors"
+              >
+                + Create Task
               </button>
             </div>
           ) : viewMode === 'list' ? (
@@ -621,11 +878,8 @@ export default function TeamDetailPage({
             <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs">
               <div className="divide-y divide-slate-100">
                 {filteredTasks.map((task) => {
-                  const canDelete =
-                    user &&
-                    (user.id === task.creatorId ||
-                      user.id === task.assigneeId ||
-                      user.id === team.ownerId);
+                  const editable = canEditTask(task);
+                  const deletable = canDeleteTask(task);
 
                   return (
                     <div
@@ -699,13 +953,15 @@ export default function TeamDetailPage({
 
                       {/* Action buttons */}
                       <div className="flex shrink-0 items-center gap-2 self-end sm:self-center">
-                        <button
-                          onClick={() => handleOpenEditTask(task)}
-                          className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
-                        >
-                          Edit
-                        </button>
-                        {canDelete && (
+                        {editable && (
+                          <button
+                            onClick={() => handleOpenEditTask(task)}
+                            className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
+                          >
+                            Edit
+                          </button>
+                        )}
+                        {deletable && (
                           <button
                             onClick={() => handleDeleteTask(task)}
                             disabled={deletingTaskId === task.id}
@@ -721,7 +977,7 @@ export default function TeamDetailPage({
               </div>
             </div>
           ) : (
-            /* Kanban Board View (Bonus Feature) */
+            /* Live-updating Kanban Board View */
             <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
               {(['TODO', 'IN_PROGRESS', 'DONE'] as const).map((colStatus) => {
                 const columnTasks = filteredTasks.filter((t) => t.status === colStatus);
@@ -732,38 +988,42 @@ export default function TeamDetailPage({
                       ? 'In Progress'
                       : 'Done';
 
+                const colBg =
+                  colStatus === 'TODO'
+                    ? 'bg-slate-50/70 border-slate-200'
+                    : colStatus === 'IN_PROGRESS'
+                      ? 'bg-amber-50/40 border-amber-200/80'
+                      : 'bg-emerald-50/40 border-emerald-200/80';
+
+                const badgeBg =
+                  colStatus === 'TODO'
+                    ? 'bg-slate-200 text-slate-700'
+                    : colStatus === 'IN_PROGRESS'
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-emerald-100 text-emerald-800';
+
                 return (
                   <div
                     key={colStatus}
-                    className="flex flex-col rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4 shadow-2xs"
+                    className={`flex flex-col rounded-2xl border ${colBg} p-4 min-h-[460px]`}
                   >
-                    <div className="mb-3 flex items-center justify-between">
+                    {/* Column Header */}
+                    <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200/60">
                       <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-black text-slate-900">{colTitle}</h4>
                         <span
-                          className={`h-2.5 w-2.5 rounded-full ${
-                            colStatus === 'DONE'
-                              ? 'bg-emerald-500'
-                              : colStatus === 'IN_PROGRESS'
-                                ? 'bg-amber-500'
-                                : 'bg-slate-400'
-                          }`}
-                        />
-                        <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
-                          {colTitle}
-                        </h4>
+                          className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold ${badgeBg}`}
+                        >
+                          {columnTasks.length}
+                        </span>
                       </div>
-                      <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600 shadow-2xs border border-slate-200">
-                        {columnTasks.length}
-                      </span>
                     </div>
 
-                    <div className="flex-1 space-y-3 min-h-[220px]">
+                    {/* Column Cards */}
+                    <div className="flex-1 space-y-3">
                       {columnTasks.map((task) => {
-                        const canDelete =
-                          user &&
-                          (user.id === task.creatorId ||
-                            user.id === task.assigneeId ||
-                            user.id === team.ownerId);
+                        const editable = canEditTask(task);
+                        const deletable = canDeleteTask(task);
 
                         return (
                           <div
@@ -800,19 +1060,52 @@ export default function TeamDetailPage({
                               </p>
                             )}
 
-                            <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-[10px] text-slate-500">
+                            {/* Quick move column buttons for real-time task board */}
+                            {editable && (
+                              <div className="mt-2.5 flex items-center gap-1 border-t border-slate-100 pt-2 text-[10px]">
+                                <span className="text-slate-400 font-semibold mr-1">Move:</span>
+                                {colStatus !== 'TODO' && (
+                                  <button
+                                    onClick={() => handleQuickStatusChange(task, 'TODO')}
+                                    className="cursor-pointer rounded bg-slate-100 px-1.5 py-0.5 font-bold text-slate-600 hover:bg-slate-200"
+                                  >
+                                    &larr; To Do
+                                  </button>
+                                )}
+                                {colStatus !== 'IN_PROGRESS' && (
+                                  <button
+                                    onClick={() => handleQuickStatusChange(task, 'IN_PROGRESS')}
+                                    className="cursor-pointer rounded bg-amber-100 px-1.5 py-0.5 font-bold text-amber-800 hover:bg-amber-200"
+                                  >
+                                    In Progress
+                                  </button>
+                                )}
+                                {colStatus !== 'DONE' && (
+                                  <button
+                                    onClick={() => handleQuickStatusChange(task, 'DONE')}
+                                    className="cursor-pointer rounded bg-emerald-100 px-1.5 py-0.5 font-bold text-emerald-800 hover:bg-emerald-200"
+                                  >
+                                    Done &rarr;
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="mt-2.5 flex items-center justify-between border-t border-slate-100 pt-2 text-[10px] text-slate-500">
                               <span className="truncate max-w-[120px]">
                                 {task.assignee ? task.assignee.name : 'Unassigned'}
                               </span>
 
                               <div className="flex items-center gap-1.5">
-                                <button
-                                  onClick={() => handleOpenEditTask(task)}
-                                  className="cursor-pointer text-indigo-600 hover:text-indigo-800 font-bold"
-                                >
-                                  Edit
-                                </button>
-                                {canDelete && (
+                                {editable && (
+                                  <button
+                                    onClick={() => handleOpenEditTask(task)}
+                                    className="cursor-pointer text-indigo-600 hover:text-indigo-800 font-bold"
+                                  >
+                                    Edit
+                                  </button>
+                                )}
+                                {deletable && (
                                   <button
                                     onClick={() => handleDeleteTask(task)}
                                     disabled={deletingTaskId === task.id}
@@ -835,7 +1128,16 @@ export default function TeamDetailPage({
         </div>
       )}
 
-      {/* ======================= TAB: MEMBERS ======================= */}
+      {/* ======================= TAB: TEAM CHAT ======================= */}
+      {activeTab === 'chat' && user && (
+        <TeamChat
+          teamId={id}
+          currentUser={user}
+          teamMembers={team.members.map((m) => ({ userId: m.userId, role: m.role }))}
+        />
+      )}
+
+      {/* ======================= TAB: MEMBERS & ROLES ======================= */}
       {activeTab === 'members' && (
         <div className="space-y-6">
           {/* Member notification feedback */}
@@ -850,70 +1152,95 @@ export default function TeamDetailPage({
             </div>
           )}
 
-          {/* Add Member Form (Owner only) */}
-          {isOwner && (
+          {/* Add Member Form (Owner & Admin only) */}
+          {canManageMembers && (
             <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5">
               <div className="flex items-center gap-2">
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-600 text-xs font-bold text-white">
-                  @
+                  +
                 </span>
-                <h3 className="text-sm font-black text-indigo-950">Thêm Thành Viên Vào Nhóm (Bằng Email Tài Khoản)</h3>
+                <h3 className="text-sm font-black text-indigo-950">Add Member to Team</h3>
               </div>
               <p className="mt-1 text-xs text-indigo-700 leading-relaxed">
-                Nhập <strong>địa chỉ Email của tài khoản đã đăng ký</strong> trong hệ thống (Hệ thống định danh người dùng qua email duy nhất, không nhập tên).
+                Add an existing registered user by their email address and assign an initial role (Member or Admin).
               </p>
 
               <form onSubmit={handleAddMember} className="mt-3 flex flex-col sm:flex-row gap-2">
                 <input
                   type="email"
                   required
-                  placeholder="Nhập email tài khoản (ví dụ: member@example.com)"
+                  placeholder="Enter user email (e.g. member@example.com)"
                   value={addMemberEmail}
                   onChange={(e) => setAddMemberEmail(e.target.value)}
                   className="flex-1 rounded-xl border border-indigo-200 bg-white px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
+
+                <select
+                  value={addMemberRole}
+                  onChange={(e) => setAddMemberRole(e.target.value as 'MEMBER' | 'ADMIN')}
+                  className="rounded-xl border border-indigo-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 focus:border-indigo-500 focus:outline-none cursor-pointer"
+                >
+                  <option value="MEMBER">Role: Member</option>
+                  <option value="ADMIN">Role: Admin</option>
+                </select>
+
                 <button
                   type="submit"
                   disabled={addingMember}
                   className="cursor-pointer rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 transition-colors disabled:opacity-50"
                 >
-                  {addingMember ? 'Đang thêm...' : '+ Add Member'}
+                  {addingMember ? 'Adding...' : '+ Add Member'}
                 </button>
               </form>
 
-              {/* Quick sample account hint */}
-              {!team.members.some((m) => m.user.email === 'member@example.com') && (
-                <div className="mt-2.5 flex items-center gap-2 text-[11px] text-slate-500">
-                  <span>💡 Tài khoản test có sẵn:</span>
-                  <button
-                    type="button"
-                    onClick={() => setAddMemberEmail('member@example.com')}
-                    className="cursor-pointer rounded-md bg-white px-2 py-0.5 font-semibold text-indigo-600 border border-indigo-200 hover:bg-indigo-50 transition-colors"
-                  >
-                    member@example.com
-                  </button>
-                </div>
-              )}
+              {/* Sample accounts helper */}
+              <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                <span>💡 Quick test accounts:</span>
+                {['admin@example.com', 'member@example.com'].map((email) => {
+                  const already = team.members.some((m) => m.user.email === email);
+                  if (already) return null;
+                  return (
+                    <button
+                      key={email}
+                      type="button"
+                      onClick={() => setAddMemberEmail(email)}
+                      className="cursor-pointer rounded-md bg-white px-2 py-0.5 font-semibold text-indigo-600 border border-indigo-200 hover:bg-indigo-50 transition-colors"
+                    >
+                      {email}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 
-          {/* Members List */}
+          {/* Members List with Role Management */}
           <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-sm font-black text-slate-900">
-                Team Members ({team.members.length})
+                Team Members & Role Access Control ({team.members.length})
               </h3>
             </div>
 
             <div className="divide-y divide-slate-100">
               {team.members.map((member) => {
                 const isMemberOwner = member.userId === team.ownerId;
-                const canRemove = isOwner && !isMemberOwner;
+                const isMemberAdmin = member.role === 'ADMIN';
+
+                // Permission to change role: Owner can change any non-owner; Admin can change members (cannot change owner or other admins)
+                const canChangeRole =
+                  !isMemberOwner &&
+                  (isOwner || (isAdmin && member.role === 'MEMBER'));
+
+                // Permission to remove member: Owner can remove any non-owner; Admin can remove regular members only
+                const canRemove =
+                  !isMemberOwner &&
+                  (isOwner || (isAdmin && member.role === 'MEMBER'));
 
                 return (
                   <div
                     key={member.id}
-                    className="flex items-center justify-between p-4 hover:bg-slate-50/70 transition-colors"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-4 hover:bg-slate-50/70 transition-colors"
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-500 text-sm font-black text-white shadow-xs">
@@ -924,24 +1251,51 @@ export default function TeamDetailPage({
                           <h4 className="text-sm font-bold text-slate-900">
                             {member.user.name}
                           </h4>
+
+                          {/* Role Badge */}
                           <span
                             className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${
                               isMemberOwner
-                                ? 'bg-amber-100 text-amber-800'
-                                : 'bg-slate-100 text-slate-700'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                : isMemberAdmin
+                                  ? 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+                                  : 'bg-slate-100 text-slate-700'
                             }`}
                           >
-                            {isMemberOwner ? 'Owner' : 'Member'}
+                            {isMemberOwner ? '👑 Owner' : isMemberAdmin ? '🛡️ Admin' : '👤 Member'}
                           </span>
                         </div>
                         <p className="text-xs text-slate-500">{member.user.email}</p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                      <span className="text-[11px] text-slate-400 hidden sm:inline">
-                        Joined {new Date(member.joinedAt).toLocaleDateString()}
-                      </span>
+                    {/* Member Controls (Role changer & Remove) */}
+                    <div className="flex items-center gap-3 self-end sm:self-center">
+                      {/* Role Dropdown (Owner & Admin only) */}
+                      {canChangeRole ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-slate-400 font-semibold">Role:</span>
+                          <select
+                            disabled={updatingRoleUserId === member.userId}
+                            value={member.role}
+                            onChange={(e) =>
+                              handleUpdateMemberRole(
+                                member.userId,
+                                member.user.name,
+                                e.target.value,
+                              )
+                            }
+                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-700 hover:border-indigo-300 focus:border-indigo-500 focus:outline-none cursor-pointer"
+                          >
+                            <option value="MEMBER">Member</option>
+                            <option value="ADMIN">Admin</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 hidden sm:inline">
+                          Joined {new Date(member.joinedAt).toLocaleDateString()}
+                        </span>
+                      )}
 
                       {canRemove && (
                         <button
@@ -959,6 +1313,9 @@ export default function TeamDetailPage({
           </div>
         </div>
       )}
+
+      {/* ======================= TAB: ACTIVITY LOG ======================= */}
+      {activeTab === 'activity' && <TeamActivity teamId={id} />}
 
       {/* ======================= MODAL: CREATE / EDIT TASK ======================= */}
       {showTaskModal && (
@@ -1061,7 +1418,7 @@ export default function TeamDetailPage({
                     <option value="">Unassigned</option>
                     {team.members.map((m) => (
                       <option key={m.userId} value={m.userId}>
-                        {m.user.name} ({m.user.email}){m.userId === team.ownerId ? ' [Owner]' : ''}
+                        {m.user.name} ({m.user.email}) [{m.role}]
                       </option>
                     ))}
                   </select>

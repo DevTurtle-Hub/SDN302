@@ -40,3 +40,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# reports & assignment docs (keep local only)
+*.docx
+*.doc
+*Ass3*
+12_10_2026*

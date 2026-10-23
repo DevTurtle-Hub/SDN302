@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/auth';
 import { TaskPriority, TaskStatus } from '@prisma/client';
+import { broadcastToTeam, recordActivity, sendNotification } from '@/lib/realtime';
 
 const validStatuses = Object.values(TaskStatus);
 const validPriorities = Object.values(TaskPriority);
@@ -100,7 +101,7 @@ export async function POST(
       );
     }
 
-    // Any member of the team can create tasks
+    // Any member or owner of the team can create tasks
     const isMember = team.members.some((m) => m.userId === user.id);
     if (!isMember && team.ownerId !== user.id) {
       return NextResponse.json(
@@ -189,6 +190,28 @@ export async function POST(
         },
       },
     });
+
+    // 1. Live real-time broadcast of task creation
+    await broadcastToTeam(team.id, 'task:created', task);
+
+    // 2. Record activity in team audit trail
+    recordActivity(
+      team.id,
+      user.id,
+      'CREATED_TASK',
+      `Created task "${task.title}"`,
+    ).catch(() => {});
+
+    // 3. Send notification if assigned to another user
+    if (assigneeId && assigneeId !== user.id) {
+      sendNotification(
+        assigneeId,
+        'Task Assigned',
+        `${user.name} assigned you to task "${task.title}" in team "${team.name}".`,
+        'TASK_ASSIGNED',
+        `/teams/${team.id}`,
+      ).catch(() => {});
+    }
 
     return NextResponse.json(task, { status: 201 });
   } catch (error) {

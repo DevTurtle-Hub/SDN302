@@ -13,6 +13,7 @@ interface TeamItem {
   owner: { id: string; name: string; email: string };
   members: { role: string; user: { id: string; name: string; email: string } }[];
   _count: { members: number; tasks: number };
+  createdAt?: string;
 }
 
 const GRADIENT_PALETTES = [
@@ -180,6 +181,9 @@ export default function TeamsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
           {teams.map((team) => {
             const isOwner = team.ownerId === user.id;
+            const myMembership = team.members.find((m) => m.user.id === user.id || m.user.email === user.email);
+            const userRole = isOwner ? 'OWNER' : myMembership?.role === 'ADMIN' ? 'ADMIN' : 'MEMBER';
+
             return (
               <div
                 key={team.id}
@@ -209,7 +213,7 @@ export default function TeamsPage() {
                           </h2>
                         </Link>
                         <p className="text-[11px] font-medium text-slate-400 mt-0.5">
-                          Created {new Date(team.createdAt).toLocaleDateString()}
+                          Created {team.createdAt ? new Date(team.createdAt).toLocaleDateString() : 'Recently'}
                         </p>
                       </div>
                     </div>
@@ -218,26 +222,14 @@ export default function TeamsPage() {
                     <div className="shrink-0 pt-0.5">
                       <span
                         className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase ${
-                          isOwner
+                          userRole === 'OWNER'
                             ? 'bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/30'
-                            : 'bg-indigo-500/10 text-indigo-700 ring-1 ring-indigo-500/30'
+                            : userRole === 'ADMIN'
+                              ? 'bg-indigo-500/10 text-indigo-700 ring-1 ring-indigo-500/30'
+                              : 'bg-slate-100 text-slate-700 ring-1 ring-slate-200'
                         }`}
                       >
-                        {isOwner ? (
-                          <>
-                            <svg className="h-3 w-3 fill-amber-500 text-amber-500" viewBox="0 0 20 20">
-                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                            </svg>
-                            Owner
-                          </>
-                        ) : (
-                          <>
-                            <svg className="h-3 w-3 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </svg>
-                            Member
-                          </>
-                        )}
+                        {userRole === 'OWNER' ? '👑 Owner' : userRole === 'ADMIN' ? '🛡️ Admin' : '👤 Member'}
                       </span>
                     </div>
                   </div>

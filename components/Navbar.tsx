@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useState } from 'react';
+import NotificationDropdown from './NotificationDropdown';
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -92,6 +93,9 @@ export default function Navbar() {
                 </div>
               ) : (
                 <div className="flex items-center gap-3 border-l border-slate-200 pl-3">
+                  {/* Real-time In-App Notifications Bell */}
+                  <NotificationDropdown userId={user.id} />
+
                   <div className="hidden sm:flex items-center gap-2">
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-600 to-cyan-500 text-xs font-bold text-white shadow-xs">
                       {user.name.charAt(0).toUpperCase()}

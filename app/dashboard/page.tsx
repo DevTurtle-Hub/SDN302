@@ -577,6 +577,15 @@ export default function DashboardPage() {
                 <div className="space-y-3">
                   {teams.map((team) => {
                     const isOwner = team.ownerId === user.id;
+                    const myMembership = team.members?.find(
+                      (m) => m.user?.id === user.id || m.user?.email === user.email,
+                    );
+                    const userRole = isOwner
+                      ? 'OWNER'
+                      : myMembership?.role === 'ADMIN'
+                        ? 'ADMIN'
+                        : 'MEMBER';
+
                     return (
                       <div
                         key={team.id}
@@ -593,12 +602,14 @@ export default function DashboardPage() {
                               </Link>
                               <span
                                 className={`rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${
-                                  isOwner
-                                    ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
-                                    : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                  userRole === 'OWNER'
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                    : userRole === 'ADMIN'
+                                      ? 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+                                      : 'bg-slate-100 text-slate-600 border border-slate-200'
                                 }`}
                               >
-                                {isOwner ? 'Owner' : 'Member'}
+                                {userRole === 'OWNER' ? '👑 Owner' : userRole === 'ADMIN' ? '🛡️ Admin' : '👤 Member'}
                               </span>
                             </div>
                             {team.description && (

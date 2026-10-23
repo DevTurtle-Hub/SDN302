@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/auth';
+import { broadcastToTeam, recordActivity, sendNotification } from '@/lib/realtime';
 
-// POST /api/teams/[id]/members - Add a member to a team by email (Owner only)
+// POST /api/teams/[id]/members - Add a member to a team by email (Owner & Admin)
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -32,10 +33,14 @@ export async function POST(
       );
     }
 
-    // Only owner can add members
-    if (team.ownerId !== user.id) {
+    // Role check: Only Owner or Admin can add members
+    const isOwner = team.ownerId === user.id;
+    const requesterMembership = team.members.find((m) => m.userId === user.id);
+    const isAdmin = requesterMembership?.role === 'ADMIN';
+
+    if (!isOwner && !isAdmin) {
       return NextResponse.json(
-        { error: 'Forbidden. Only the team Owner can add members.' },
+        { error: 'Forbidden. Only the Team Owner or Admins can add members.' },
         { status: 403 },
       );
     }
@@ -50,7 +55,7 @@ export async function POST(
       );
     }
 
-    const { email } = body;
+    const { email, role } = body;
 
     if (!email || typeof email !== 'string') {
       return NextResponse.json(
@@ -82,11 +87,13 @@ export async function POST(
       );
     }
 
+    const assignedRole = role === 'ADMIN' ? 'ADMIN' : 'MEMBER';
+
     const newMember = await prisma.teamMember.create({
       data: {
         teamId: team.id,
         userId: userToAdd.id,
-        role: 'MEMBER',
+        role: assignedRole,
       },
       include: {
         user: {
@@ -94,6 +101,26 @@ export async function POST(
         },
       },
     });
+
+    // 1. Broadcast real-time event to active team members
+    await broadcastToTeam(team.id, 'member:added', newMember);
+
+    // 2. Record activity in team audit log
+    recordActivity(
+      team.id,
+      user.id,
+      'ADDED_MEMBER',
+      `Added ${userToAdd.name} (${assignedRole}) to the team`,
+    ).catch(() => {});
+
+    // 3. Send in-app notification to the newly added user
+    sendNotification(
+      userToAdd.id,
+      'Added to Team',
+      `You have been added to team "${team.name}" by ${user.name}.`,
+      'TEAM_INVITE',
+      `/teams/${team.id}`,
+    ).catch(() => {});
 
     return NextResponse.json(newMember, { status: 201 });
   } catch (error) {
