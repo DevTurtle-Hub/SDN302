@@ -108,3 +108,28 @@ export async function ensureDatabaseSchema() {
 
   return ensuringPromise;
 }
+
+/**
+ * Executes a database operation and only runs ensureDatabaseSchema()
+ * as an automatic fallback if a "table does not exist" error occurs.
+ * This completely avoids DDL catalog locking on hot paths.
+ */
+export async function withSchemaFallback<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err: unknown) {
+    const errorAny = err as { code?: string; message?: string };
+    if (
+      errorAny?.code === 'P2021' ||
+      (typeof errorAny?.message === 'string' &&
+        (errorAny.message.includes('does not exist') ||
+          errorAny.message.includes('relation') ||
+          errorAny.message.includes('table')))
+    ) {
+      console.warn('Auto-ensuring missing database tables...');
+      await ensureDatabaseSchema();
+      return await fn();
+    }
+    throw err;
+  }
+}

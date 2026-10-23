@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma, ensureDatabaseSchema } from '@/lib/prisma';
+import { prisma, withSchemaFallback } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/auth';
 
 interface RouteContext {
@@ -8,7 +8,6 @@ interface RouteContext {
 
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
-    await ensureDatabaseSchema();
     const user = await getAuthUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -16,48 +15,52 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const { id: teamId } = await context.params;
 
-    // Verify team member or owner
-    const membership = await prisma.teamMember.findUnique({
-      where: {
-        teamId_userId: {
-          teamId,
-          userId: user.id,
-        },
-      },
-    });
-
-    const team = await prisma.team.findUnique({
-      where: { id: teamId },
-      select: { ownerId: true },
-    });
+    // Concurrently verify team membership and fetch activities
+    const [team, activities] = await withSchemaFallback(() =>
+      Promise.all([
+        prisma.team.findUnique({
+          where: { id: teamId },
+          select: {
+            ownerId: true,
+            members: {
+              where: { userId: user.id },
+              select: { role: true },
+            },
+          },
+        }),
+        prisma.activityLog.findMany({
+          where: { teamId },
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        }),
+      ]),
+    );
 
     if (!team) {
       return NextResponse.json({ error: 'Team not found' }, { status: 404 });
     }
 
-    if (!membership && team.ownerId !== user.id) {
+    if (team.ownerId !== user.id && team.members.length === 0) {
       return NextResponse.json(
         { error: 'You are not a member of this team' },
         { status: 403 },
       );
     }
 
-    const activities = await prisma.activityLog.findMany({
-      where: { teamId },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
+    return NextResponse.json(activities, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
       },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
     });
-
-    return NextResponse.json(activities);
   } catch (error: unknown) {
     console.error('Error fetching activities:', error);
     return NextResponse.json(
@@ -66,3 +69,4 @@ export async function GET(request: NextRequest, context: RouteContext) {
     );
   }
 }
+

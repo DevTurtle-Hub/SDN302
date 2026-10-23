@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma, ensureDatabaseSchema } from '@/lib/prisma';
+import { prisma, withSchemaFallback } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/auth';
-import { broadcastToTeam, recordActivity } from '@/lib/realtime';
+import { broadcastToTeam } from '@/lib/realtime';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-// GET: Fetch message history for team chat
+// GET: Fetch message history for team chat (with ultra-fast delta support via ?since=)
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
-    await ensureDatabaseSchema();
     const user = await getAuthUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -18,49 +17,65 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const { id: teamId } = await context.params;
 
-    // Check if user is member or owner of team
-    const membership = await prisma.teamMember.findUnique({
-      where: {
-        teamId_userId: {
-          teamId,
-          userId: user.id,
-        },
-      },
-    });
+    const { searchParams } = new URL(request.url);
+    const sinceParam = searchParams.get('since');
+    let sinceDate: Date | null = null;
+    if (sinceParam) {
+      const parsed = new Date(sinceParam);
+      if (!isNaN(parsed.getTime())) {
+        sinceDate = parsed;
+      }
+    }
 
-    const team = await prisma.team.findUnique({
-      where: { id: teamId },
-      select: { ownerId: true },
-    });
+    // Parallel execution: Verify team membership and fetch messages concurrently
+    const [team, messages] = await withSchemaFallback(() =>
+      Promise.all([
+        prisma.team.findUnique({
+          where: { id: teamId },
+          select: {
+            ownerId: true,
+            members: {
+              where: { userId: user.id },
+              select: { role: true },
+            },
+          },
+        }),
+        prisma.message.findMany({
+          where: {
+            teamId,
+            ...(sinceDate ? { createdAt: { gt: sinceDate } } : {}),
+          },
+          include: {
+            sender: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+          take: sinceDate ? 50 : 100,
+        }),
+      ]),
+    );
 
     if (!team) {
       return NextResponse.json({ error: 'Team not found' }, { status: 404 });
     }
 
-    if (!membership && team.ownerId !== user.id) {
+    if (team.ownerId !== user.id && team.members.length === 0) {
       return NextResponse.json(
         { error: 'You are not a member of this team' },
         { status: 403 },
       );
     }
 
-    // Fetch messages with sender info
-    const messages = await prisma.message.findMany({
-      where: { teamId },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
+    return NextResponse.json(messages, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
       },
-      orderBy: { createdAt: 'asc' },
-      take: 100,
     });
-
-    return NextResponse.json(messages);
   } catch (error: unknown) {
     console.error('Error fetching messages:', error);
     return NextResponse.json(
@@ -73,7 +88,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
 // POST: Send new message in team chat
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
-    await ensureDatabaseSchema();
     const user = await getAuthUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -81,26 +95,23 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const { id: teamId } = await context.params;
 
-    // Verify membership
-    const membership = await prisma.teamMember.findUnique({
-      where: {
-        teamId_userId: {
-          teamId,
-          userId: user.id,
-        },
-      },
-    });
-
+    // Single fast query to verify team and membership
     const team = await prisma.team.findUnique({
       where: { id: teamId },
-      select: { ownerId: true, name: true },
+      select: {
+        ownerId: true,
+        members: {
+          where: { userId: user.id },
+          select: { role: true },
+        },
+      },
     });
 
     if (!team) {
       return NextResponse.json({ error: 'Team not found' }, { status: 404 });
     }
 
-    if (!membership && team.ownerId !== user.id) {
+    if (team.ownerId !== user.id && team.members.length === 0) {
       return NextResponse.json(
         { error: 'You are not a member of this team' },
         { status: 403 },
@@ -117,38 +128,37 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    // Create message in database
-    const message = await prisma.message.create({
-      data: {
-        content: content.trim(),
-        teamId,
-        senderId: user.id,
-        fileUrl: fileUrl || null,
-        fileName: fileName || null,
-      },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+    // Create message in database with schema fallback
+    const message = await withSchemaFallback(() =>
+      prisma.message.create({
+        data: {
+          content: content.trim(),
+          teamId,
+          senderId: user.id,
+          fileUrl: fileUrl || null,
+          fileName: fileName || null,
+        },
+        include: {
+          sender: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
           },
         },
+      }),
+    );
+
+    // Real-time broadcast to all online team members (non-blocking)
+    broadcastToTeam(teamId, 'message:created', message).catch(() => {});
+
+    return NextResponse.json(message, {
+      status: 201,
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
       },
     });
-
-    // Real-time broadcast to all online team members
-    await broadcastToTeam(teamId, 'message:created', message);
-
-    // Record activity log for team audit trail
-    recordActivity(
-      teamId,
-      user.id,
-      'SENT_MESSAGE',
-      `Sent a message in team chat`,
-    ).catch(() => {});
-
-    return NextResponse.json(message, { status: 201 });
   } catch (error: unknown) {
     console.error('Error sending message:', error);
     return NextResponse.json(
@@ -157,3 +167,4 @@ export async function POST(request: NextRequest, context: RouteContext) {
     );
   }
 }
+

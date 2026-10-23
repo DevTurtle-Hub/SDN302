@@ -1,29 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma, ensureDatabaseSchema } from '@/lib/prisma';
+import { prisma, withSchemaFallback } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
-    await ensureDatabaseSchema();
     const user = await getAuthUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const notifications = await prisma.notification.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'desc' },
-      take: 40,
-    });
+    const [notifications, unreadCount] = await withSchemaFallback(() =>
+      Promise.all([
+        prisma.notification.findMany({
+          where: { userId: user.id },
+          orderBy: { createdAt: 'desc' },
+          take: 40,
+        }),
+        prisma.notification.count({
+          where: { userId: user.id, read: false },
+        }),
+      ]),
+    );
 
-    const unreadCount = await prisma.notification.count({
-      where: { userId: user.id, read: false },
-    });
-
-    return NextResponse.json({
-      notifications,
-      unreadCount,
-    });
+    return NextResponse.json(
+      {
+        notifications,
+        unreadCount,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+        },
+      },
+    );
   } catch (error: unknown) {
     console.error('Error fetching notifications:', error);
     return NextResponse.json(

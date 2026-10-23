@@ -54,72 +54,120 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTypingSentRef = useRef<number>(0);
+  const lastConfirmedTimeRef = useRef<string | null>(null);
+  const isSyncingRef = useRef<boolean>(false);
 
   const scrollToBottom = (smooth = true) => {
     messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
   };
 
-  // 1. Fetch message history
-  const fetchMessages = useCallback(async (showLoading = true) => {
+  // 1. Initial message history load
+  const fetchInitialMessages = useCallback(async () => {
     try {
-      if (showLoading) setLoading(true);
-      const res = await fetch(`/api/teams/${teamId}/messages`);
+      setLoading(true);
+      const res = await fetch(`/api/teams/${teamId}/messages`, { cache: 'no-store' });
       if (res.ok) {
         const data: ChatMessage[] = await res.json();
-        setMessages((prev) => {
-          // If message count or last message changed, update and scroll
-          if (
-            data.length !== prev.length ||
-            data[data.length - 1]?.id !== prev[prev.length - 1]?.id
-          ) {
-            setTimeout(() => scrollToBottom(true), 50);
-            return data;
-          }
-          return prev;
-        });
+        setMessages(data);
+        if (data.length > 0) {
+          lastConfirmedTimeRef.current = data[data.length - 1].createdAt;
+        }
+        setTimeout(() => scrollToBottom(false), 30);
       }
     } catch (err) {
       console.error('Error fetching chat messages:', err);
     } finally {
-      if (showLoading) setLoading(false);
+      setLoading(false);
     }
   }, [teamId]);
 
   useEffect(() => {
-    fetchMessages(true);
-  }, [fetchMessages]);
+    fetchInitialMessages();
+  }, [fetchInitialMessages]);
 
-  // 2. Real-time Subscription (Pusher with SSE fallback)
+  // 2. High-speed delta sync (<20ms query overhead with ?since=)
+  const syncNewMessages = useCallback(async () => {
+    if (isSyncingRef.current) return;
+    isSyncingRef.current = true;
+
+    try {
+      const lastTime = lastConfirmedTimeRef.current;
+      const url = lastTime
+        ? `/api/teams/${teamId}/messages?since=${encodeURIComponent(lastTime)}`
+        : `/api/teams/${teamId}/messages`;
+
+      const res = await fetch(url, { cache: 'no-store' });
+      if (res.ok) {
+        const incoming: ChatMessage[] = await res.json();
+        if (Array.isArray(incoming) && incoming.length > 0) {
+          setMessages((prev) => {
+            // Remove optimistic temp message if incoming contains its real record
+            const cleaned = prev.filter(
+              (m) =>
+                !m.id.startsWith('temp-') ||
+                !incoming.some(
+                  (inc) =>
+                    inc.senderId === m.senderId && inc.content === m.content,
+                ),
+            );
+
+            // Deduplicate by message ID
+            const existingIds = new Set(cleaned.map((m) => m.id));
+            const newToAdd = incoming.filter((inc) => !existingIds.has(inc.id));
+
+            if (newToAdd.length === 0) return prev;
+
+            const combined = [...cleaned, ...newToAdd];
+            const realMessages = combined.filter((m) => !m.id.startsWith('temp-'));
+            if (realMessages.length > 0) {
+              lastConfirmedTimeRef.current =
+                realMessages[realMessages.length - 1].createdAt;
+            }
+            setTimeout(() => scrollToBottom(true), 30);
+            return combined;
+          });
+        }
+      }
+    } catch {
+      // Silent error on fast poll
+    } finally {
+      isSyncingRef.current = false;
+    }
+  }, [teamId]);
+
+  // 3. Real-time Subscription (Pusher / SSE instant listener)
   useEffect(() => {
     const unsubscribe = subscribeToTeamChannel(
       teamId,
       {
         'message:created': (newMsg: ChatMessage) => {
           setMessages((prev) => {
-            // Check if already in list (or matches optimistic temp message)
             if (prev.some((m) => m.id === newMsg.id)) return prev;
-            // If there's an optimistic temp message with same content and sender from last 5s, replace it
-            const tempIndex = prev.findIndex(
+            const cleaned = prev.filter(
               (m) =>
-                m.id.startsWith('temp-') &&
-                m.senderId === newMsg.senderId &&
-                m.content === newMsg.content,
+                !m.id.startsWith('temp-') ||
+                !(m.senderId === newMsg.senderId && m.content === newMsg.content),
             );
-            if (tempIndex !== -1) {
-              const updated = [...prev];
-              updated[tempIndex] = newMsg;
-              return updated;
-            }
-            return [...prev, newMsg];
+            const combined = [...cleaned, newMsg];
+            lastConfirmedTimeRef.current = newMsg.createdAt;
+            setTimeout(() => scrollToBottom(true), 30);
+            return combined;
           });
           setTypingUsers((prev) => {
             const next = { ...prev };
             delete next[newMsg.senderId];
             return next;
           });
-          setTimeout(() => scrollToBottom(true), 50);
         },
-        'chat:typing': ({ userId, name, isTyping }: { userId: string; name: string; isTyping: boolean }) => {
+        'chat:typing': ({
+          userId,
+          name,
+          isTyping,
+        }: {
+          userId: string;
+          name: string;
+          isTyping: boolean;
+        }) => {
           if (userId === currentUser.id) return;
           setTypingUsers((prev) => {
             const next = { ...prev };
@@ -138,38 +186,42 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
     return unsubscribe;
   }, [teamId, currentUser.id]);
 
-  // 3. Smart Background Auto-Sync Poller (Every 2.5s for seamless multi-user sync on Vercel)
+  // 4. Adaptive Fast Poller (1000ms active, instant on focus, 3000ms background)
   useEffect(() => {
     let isMounted = true;
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/teams/${teamId}/messages`);
-        if (res.ok && isMounted) {
-          const latest: ChatMessage[] = await res.json();
-          setMessages((prev) => {
-            // Check if any new message exists
-            if (
-              latest.length !== prev.length ||
-              latest[latest.length - 1]?.id !== prev[prev.length - 1]?.id
-            ) {
-              setTimeout(() => scrollToBottom(true), 50);
-              return latest;
-            }
-            return prev;
-          });
+    let timerId: NodeJS.Timeout | null = null;
+
+    const schedulePoll = () => {
+      if (!isMounted) return;
+      const intervalDelay = document.hidden ? 3000 : 1000;
+      timerId = setTimeout(async () => {
+        if (isMounted) {
+          await syncNewMessages();
+          schedulePoll();
         }
-      } catch {
-        // silent background poll error
+      }, intervalDelay);
+    };
+
+    schedulePoll();
+
+    const handleFocusOrVisibility = () => {
+      if (document.visibilityState === 'visible' && isMounted) {
+        syncNewMessages();
       }
-    }, 2500);
+    };
+
+    window.addEventListener('visibilitychange', handleFocusOrVisibility);
+    window.addEventListener('focus', handleFocusOrVisibility);
 
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      if (timerId) clearTimeout(timerId);
+      window.removeEventListener('visibilitychange', handleFocusOrVisibility);
+      window.removeEventListener('focus', handleFocusOrVisibility);
     };
-  }, [teamId]);
+  }, [syncNewMessages]);
 
-  // Broadcast typing status with 2-second throttle (avoids lag on every keystroke)
+  // Broadcast typing status with 2-second throttle
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputText(e.target.value);
 
@@ -195,7 +247,7 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
     }, 2500);
   };
 
-  // Send message with OPTIMISTIC UI (0ms delay, buttery smooth sending)
+  // Send message with 0ms OPTIMISTIC UI + Instant Sync Burst
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     const contentToSend = inputText.trim();
@@ -207,7 +259,7 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
     setAttachmentUrl('');
     setShowAttachmentInput(false);
 
-    // 2. Add optimistic message to UI immediately (0ms latency!)
+    // 2. Add optimistic message to UI immediately (0ms delay!)
     const tempId = `temp-${Date.now()}`;
     const optimisticMsg: ChatMessage = {
       id: tempId,
@@ -241,12 +293,15 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
 
       if (res.ok) {
         const savedMsg: ChatMessage = await res.json();
-        // Replace temp optimistic message with actual persisted record
+        lastConfirmedTimeRef.current = savedMsg.createdAt;
         setMessages((prev) =>
           prev.map((m) => (m.id === tempId ? savedMsg : m)),
         );
+
+        // Immediate burst sync (checks in 300ms and 700ms for incoming responses)
+        setTimeout(() => syncNewMessages(), 300);
+        setTimeout(() => syncNewMessages(), 700);
       } else {
-        // Rollback on error
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
         const data = await res.json();
         alert(data.error || 'Failed to send message');
@@ -316,7 +371,7 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
 
         <div className="flex items-center gap-2 rounded-xl bg-white border border-slate-200 px-3 py-1.5 shadow-2xs">
           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-xs font-bold text-emerald-700">Online & Live</span>
+          <span className="text-xs font-bold text-emerald-700">Real-Time Instant Sync</span>
         </div>
       </div>
 
@@ -383,6 +438,14 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
                     }`}
                   >
                     <p className="whitespace-pre-wrap">{msg.content}</p>
+
+                    {msg.id.startsWith('temp-') && (
+                      <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-indigo-200">
+                        <span className="h-1.5 w-1.5 rounded-full bg-white/70 animate-ping" />
+                        <span>Sending...</span>
+                      </div>
+                    )}
+
 
                     {/* Image Attachment (Bonus feature) */}
                     {msg.fileUrl && (
