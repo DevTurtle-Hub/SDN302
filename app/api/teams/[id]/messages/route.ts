@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { prisma, ensureDatabaseSchema } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/auth';
 import { broadcastToTeam, recordActivity } from '@/lib/realtime';
 
@@ -10,6 +10,7 @@ interface RouteContext {
 // GET: Fetch message history for team chat
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
+    await ensureDatabaseSchema();
     const user = await getAuthUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -72,6 +73,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 // POST: Send new message in team chat
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
+    await ensureDatabaseSchema();
     const user = await getAuthUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
