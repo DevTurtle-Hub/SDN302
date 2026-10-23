@@ -7,6 +7,29 @@ import { useAuth } from '@/context/AuthContext';
 import TeamChat from '@/components/TeamChat';
 import TeamActivity from '@/components/TeamActivity';
 import { subscribeToTeamChannel } from '@/lib/realtime-client';
+import {
+  Crown,
+  Shield,
+  ShieldCheck,
+  User,
+  Users,
+  CheckSquare,
+  MessageSquare,
+  History,
+  Plus,
+  Search,
+  Clock,
+  CheckCircle2,
+  ArrowRight,
+  ArrowLeft,
+  Pencil,
+  Trash2,
+  X,
+  Calendar,
+  AlertCircle,
+  Sparkles,
+} from 'lucide-react';
+
 
 interface Member {
   id: string;
@@ -562,7 +585,7 @@ export default function TeamDetailPage({
 
   if (authLoading || loading) {
     return (
-      <div className="mx-auto flex max-w-6xl items-center justify-center py-32">
+      <div className="mx-auto flex max-w-7xl items-center justify-center py-32">
         <div className="flex flex-col items-center gap-3">
           <div className="h-9 w-9 animate-spin rounded-full border-3 border-indigo-600 border-t-transparent" />
           <p className="text-sm font-semibold text-slate-500">Loading team workspace...</p>
@@ -596,7 +619,7 @@ export default function TeamDetailPage({
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       {/* Breadcrumb Navigation & Team Switcher */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3 text-xs">
         <nav className="flex items-center gap-2 font-semibold text-slate-500">
@@ -639,7 +662,13 @@ export default function TeamDetailPage({
                       : 'bg-slate-100 text-slate-700 border border-slate-200'
                 }`}
               >
-                {isOwner ? '👑 Workspace Owner' : isAdmin ? '🛡️ Team Admin' : '👤 Team Member'}
+                {isOwner ? (
+                  <span className="inline-flex items-center gap-1.5"><Crown className="h-3.5 w-3.5 text-amber-700" /> Workspace Owner</span>
+                ) : isAdmin ? (
+                  <span className="inline-flex items-center gap-1.5"><Shield className="h-3.5 w-3.5 text-indigo-700" /> Team Admin</span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5"><User className="h-3.5 w-3.5 text-slate-600" /> Team Member</span>
+                )}
               </span>
               <span className="text-xs text-slate-400">&bull;</span>
               <span className="text-xs text-slate-500 font-medium">
@@ -682,8 +711,8 @@ export default function TeamDetailPage({
         <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-base shadow-2xs border border-slate-200/80">
-                {isOwner ? '👑' : isAdmin ? '🛡️' : '👤'}
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white shadow-xs border border-slate-200">
+                {isOwner ? <Crown className="h-4 w-4 text-amber-700" /> : isAdmin ? <Shield className="h-4 w-4 text-indigo-700" /> : <User className="h-4 w-4 text-slate-600" />}
               </span>
               <div>
                 <span className="text-xs font-bold text-slate-900">
@@ -714,7 +743,7 @@ export default function TeamDetailPage({
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            📋 Tasks ({team.tasks.length})
+            <span className="inline-flex items-center gap-2"><CheckSquare className="h-4 w-4" /> Tasks ({team.tasks.length})</span>
             {activeTab === 'tasks' && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-600 to-cyan-500 rounded-full" />
             )}
@@ -728,7 +757,7 @@ export default function TeamDetailPage({
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            <span>💬 Team Chat</span>
+            <span className="inline-flex items-center gap-2"><MessageSquare className="h-4 w-4" /> Team Chat</span>
             <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             {activeTab === 'chat' && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-600 to-cyan-500 rounded-full" />
@@ -743,7 +772,7 @@ export default function TeamDetailPage({
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            👥 Members & Roles ({team.members.length})
+            <span className="inline-flex items-center gap-2"><Users className="h-4 w-4" /> Members & Roles ({team.members.length})</span>
             {activeTab === 'members' && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-600 to-cyan-500 rounded-full" />
             )}
@@ -757,7 +786,7 @@ export default function TeamDetailPage({
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            📜 Activity Log
+            <span className="inline-flex items-center gap-2"><History className="h-4 w-4" /> Activity Log</span>
             {activeTab === 'activity' && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-600 to-cyan-500 rounded-full" />
             )}
@@ -847,7 +876,7 @@ export default function TeamDetailPage({
                 onClick={handleOpenCreateTask}
                 className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:from-indigo-700 hover:to-cyan-700 transition-all"
               >
-                + New Task
+                <Plus className="h-4 w-4" /> New Task
               </button>
             </div>
           </div>
@@ -1156,8 +1185,8 @@ export default function TeamDetailPage({
           {canManageMembers && (
             <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5">
               <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-600 text-xs font-bold text-white">
-                  +
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white">
+                  <Users className="h-4 w-4" />
                 </span>
                 <h3 className="text-sm font-black text-indigo-950">Add Member to Team</h3>
               </div>
@@ -1189,13 +1218,13 @@ export default function TeamDetailPage({
                   disabled={addingMember}
                   className="cursor-pointer rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 transition-colors disabled:opacity-50"
                 >
-                  {addingMember ? 'Adding...' : '+ Add Member'}
+                  {addingMember ? 'Adding...' : 'Add Member'}
                 </button>
               </form>
 
               {/* Sample accounts helper */}
               <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                <span>💡 Quick test accounts:</span>
+                <span className="inline-flex items-center gap-1 font-semibold text-slate-600"><Sparkles className="h-3 w-3 text-indigo-600" /> Quick test accounts:</span>
                 {['admin@example.com', 'member@example.com'].map((email) => {
                   const already = team.members.some((m) => m.user.email === email);
                   if (already) return null;
@@ -1262,7 +1291,13 @@ export default function TeamDetailPage({
                                   : 'bg-slate-100 text-slate-700'
                             }`}
                           >
-                            {isMemberOwner ? '👑 Owner' : isMemberAdmin ? '🛡️ Admin' : '👤 Member'}
+                            {isMemberOwner ? (
+                                <span className="inline-flex items-center gap-1"><Crown className="h-3 w-3 text-amber-700" /> Owner</span>
+                              ) : isMemberAdmin ? (
+                                <span className="inline-flex items-center gap-1"><Shield className="h-3 w-3 text-indigo-700" /> Admin</span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1"><User className="h-3 w-3 text-slate-600" /> Member</span>
+                              )}
                           </span>
                         </div>
                         <p className="text-xs text-slate-500">{member.user.email}</p>
@@ -1320,7 +1355,7 @@ export default function TeamDetailPage({
       {/* ======================= MODAL: CREATE / EDIT TASK ======================= */}
       {showTaskModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+          <div className="w-full max-w-2xl rounded-3xl bg-white p-8 sm:p-10 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-black text-slate-900">
                 {editingTask ? 'Edit Task Details' : 'Create New Task'}
@@ -1329,9 +1364,7 @@ export default function TeamDetailPage({
                 onClick={() => setShowTaskModal(false)}
                 className="cursor-pointer rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
               >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="h-5 w-5" />
               </button>
             </div>
 
@@ -1465,16 +1498,14 @@ export default function TeamDetailPage({
       {/* ======================= MODAL: EDIT TEAM INFO ======================= */}
       {showEditTeamModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+          <div className="w-full max-w-xl rounded-3xl bg-white p-8 sm:p-10 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-black text-slate-900">Edit Team Info</h3>
               <button
                 onClick={() => setShowEditTeamModal(false)}
                 className="cursor-pointer rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
               >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="h-5 w-5" />
               </button>
             </div>
 

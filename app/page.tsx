@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import { Check, ArrowRight } from 'lucide-react';
 
 export default function HomePage() {
   const { user, loading } = useAuth();
@@ -74,25 +75,25 @@ export default function HomePage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5 max-w-lg mx-auto lg:mx-0">
               <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
                 <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 text-[10px] font-bold">
-                  ✓
+                  <Check className="h-3 w-3" />
                 </span>
                 <span>Role-based access (Owner &bull; Member)</span>
               </div>
               <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
                 <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-cyan-600 text-[10px] font-bold">
-                  ✓
+                  <Check className="h-3 w-3" />
                 </span>
                 <span>Real-time Kanban &amp; Sprint tracking</span>
               </div>
               <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
                 <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 text-[10px] font-bold">
-                  ✓
+                  <Check className="h-3 w-3" />
                 </span>
                 <span>Stateless HTTP-only JWT &amp; Bcrypt</span>
               </div>
               <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
                 <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">
-                  ✓
+                  <Check className="h-3 w-3" />
                 </span>
                 <span>Invite teammates via email</span>
               </div>

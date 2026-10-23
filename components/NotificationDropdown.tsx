@@ -3,6 +3,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { subscribeToUserChannel } from '@/lib/realtime-client';
+import {
+  Bell,
+  Check,
+  CheckCheck,
+  CheckSquare,
+  Users,
+  ShieldAlert,
+  Info,
+  Clock,
+  ArrowRight,
+} from 'lucide-react';
 
 interface NotificationItem {
   id: string;
@@ -123,34 +134,26 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
     switch (type) {
       case 'TASK_ASSIGNED':
         return (
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
+            <CheckSquare className="h-4 w-4" />
           </span>
         );
       case 'TEAM_INVITE':
         return (
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
+            <Users className="h-4 w-4" />
           </span>
         );
       case 'ROLE_UPDATED':
         return (
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 border border-amber-100">
+            <ShieldAlert className="h-4 w-4" />
           </span>
         );
       default:
         return (
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 border border-slate-200">
+            <Info className="h-4 w-4" />
           </span>
         );
     }
@@ -172,18 +175,11 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
           setIsOpen(!isOpen);
           requestDesktopPermission();
         }}
-        className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200/90 bg-white text-slate-600 transition-all hover:border-indigo-200 hover:bg-slate-50 hover:text-indigo-600 focus:outline-none shadow-xs cursor-pointer"
+        className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-all hover:border-indigo-300 hover:bg-slate-50 hover:text-indigo-600 focus:outline-none shadow-xs cursor-pointer"
         aria-label="Notifications"
         title="Notifications"
       >
-        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="1.8"
-            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-          />
-        </svg>
+        <Bell className="h-5 w-5" />
 
         {unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white shadow-xs animate-pulse">
@@ -192,18 +188,18 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
         )}
       </button>
 
-      {/* Dropdown Panel */}
+      {/* Dropdown Panel - Wide & Clear */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl border border-slate-200/90 bg-white shadow-xl shadow-slate-900/10 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+        <div className="absolute right-0 mt-2 w-84 sm:w-[420px] rounded-2xl border border-slate-200 bg-white shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-5 py-3.5">
             <div className="flex items-center gap-2">
               <span className="text-xs font-black uppercase tracking-wider text-slate-900">
                 Notifications
               </span>
               {unreadCount > 0 && (
-                <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
-                  {unreadCount} new
+                <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-bold text-indigo-700">
+                  {unreadCount} unread
                 </span>
               )}
             </div>
@@ -211,27 +207,26 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
             {unreadCount > 0 && (
               <button
                 onClick={markAllAsRead}
-                className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer"
+                className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer"
               >
-                Mark all as read
+                <CheckCheck className="h-3.5 w-3.5" />
+                <span>Mark all read</span>
               </button>
             )}
           </div>
 
           {/* Notifications List */}
-          <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+          <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
             {loading && notifications.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-400">Loading notifications...</div>
+              <div className="p-8 text-center text-xs text-slate-400">Loading notifications...</div>
             ) : notifications.length === 0 ? (
               <div className="p-8 text-center">
-                <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400">
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                  </svg>
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                  <Bell className="h-6 w-6" />
                 </div>
-                <p className="text-xs font-semibold text-slate-600">No notifications yet</p>
-                <p className="mt-0.5 text-[11px] text-slate-400">
-                  You will be notified when assigned to tasks or added to teams.
+                <p className="text-sm font-bold text-slate-700">No notifications yet</p>
+                <p className="mt-1 text-xs text-slate-400 max-w-xs mx-auto">
+                  You will receive real-time alerts when assigned tasks or invited to teams.
                 </p>
               </div>
             ) : (
@@ -241,7 +236,7 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
                   onClick={() => {
                     if (!notif.read) markAsRead(notif.id);
                   }}
-                  className={`flex items-start gap-3 p-3.5 transition-colors cursor-pointer ${
+                  className={`flex items-start gap-3.5 p-4 transition-colors cursor-pointer ${
                     notif.read ? 'bg-white hover:bg-slate-50' : 'bg-indigo-50/40 hover:bg-indigo-50/70'
                   }`}
                 >
@@ -252,23 +247,25 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
                       <p className={`text-xs font-bold truncate ${notif.read ? 'text-slate-700' : 'text-slate-900'}`}>
                         {notif.title}
                       </p>
-                      <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                      <span className="flex items-center gap-1 text-[10px] text-slate-400 whitespace-nowrap">
+                        <Clock className="h-3 w-3" />
                         {formatTimeAgo(notif.createdAt)}
                       </span>
                     </div>
 
-                    <p className="mt-0.5 text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                    <p className="mt-1 text-xs text-slate-500 line-clamp-2 leading-relaxed">
                       {notif.content}
                     </p>
 
-                    <div className="mt-2 flex items-center justify-between">
+                    <div className="mt-2.5 flex items-center justify-between">
                       {notif.link ? (
                         <Link
                           href={notif.link}
                           onClick={() => setIsOpen(false)}
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:underline"
+                          className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:underline"
                         >
-                          View details &rarr;
+                          <span>View Details</span>
+                          <ArrowRight className="h-3 w-3" />
                         </Link>
                       ) : (
                         <span />
@@ -277,8 +274,9 @@ export default function NotificationDropdown({ userId }: { userId?: string }) {
                       {!notif.read && (
                         <button
                           onClick={(e) => markAsRead(notif.id, e)}
-                          className="text-[10px] text-slate-400 hover:text-slate-600 font-medium"
+                          className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-indigo-600 font-semibold"
                         >
+                          <Check className="h-3 w-3" />
                           Mark read
                         </button>
                       )}

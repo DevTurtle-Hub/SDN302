@@ -4,6 +4,23 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import {
+  Crown,
+  Shield,
+  User,
+  Users,
+  CheckSquare,
+  Plus,
+  Search,
+  Clock,
+  CheckCircle2,
+  ArrowRight,
+  X,
+  LayoutDashboard,
+  Calendar,
+  AlertCircle,
+} from 'lucide-react';
+
 
 interface TeamItem {
   id: string;
@@ -609,7 +626,13 @@ export default function DashboardPage() {
                                       : 'bg-slate-100 text-slate-600 border border-slate-200'
                                 }`}
                               >
-                                {userRole === 'OWNER' ? '👑 Owner' : userRole === 'ADMIN' ? '🛡️ Admin' : '👤 Member'}
+                                {userRole === 'OWNER' ? (
+                                <span className="inline-flex items-center gap-1"><Crown className="h-3 w-3 text-amber-700" /> Owner</span>
+                              ) : userRole === 'ADMIN' ? (
+                                <span className="inline-flex items-center gap-1"><Shield className="h-3 w-3 text-indigo-700" /> Admin</span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1"><User className="h-3 w-3 text-slate-600" /> Member</span>
+                              )}
                               </span>
                             </div>
                             {team.description && (
@@ -715,7 +738,7 @@ export default function DashboardPage() {
            ========================================================================= */}
         {showCreateModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-xs">
-            <div className="w-full max-w-lg rounded-2xl bg-white p-7 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-100">
+            <div className="w-full max-w-xl rounded-3xl bg-white p-8 sm:p-10 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-100">
               <div className="mb-5 flex items-center justify-between pb-4 border-b border-slate-100">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">

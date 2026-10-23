@@ -2,6 +2,17 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { subscribeToTeamChannel } from '@/lib/realtime-client';
+import {
+  MessageSquare,
+  Send,
+  Paperclip,
+  Image as ImageIcon,
+  Crown,
+  Shield,
+  User,
+  X,
+  Wifi,
+} from 'lucide-react';
 
 export interface ChatMessage {
   id: string;
@@ -143,28 +154,13 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
         body: JSON.stringify({
           content: content || 'Shared an image attachment',
           fileUrl: attachmentUrl || null,
-          fileName: attachmentUrl ? 'attachment.jpg' : null,
         }),
       });
 
       if (res.ok) {
-        const createdMsg: ChatMessage = await res.json();
-        // Optimistically add message if not already added by SSE
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === createdMsg.id)) return prev;
-          return [...prev, createdMsg];
-        });
         setInputText('');
         setAttachmentUrl('');
         setShowAttachmentInput(false);
-        setTimeout(() => scrollToBottom(true), 50);
-
-        // Clear typing
-        fetch(`/api/teams/${teamId}/typing`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ isTyping: false }),
-        }).catch(() => {});
       } else {
         const data = await res.json();
         alert(data.error || 'Failed to send message');
@@ -186,19 +182,22 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
     switch (role.toUpperCase()) {
       case 'OWNER':
         return (
-          <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-800">
-            👑 Owner
+          <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-800">
+            <Crown className="h-3 w-3 text-amber-700" />
+            Owner
           </span>
         );
       case 'ADMIN':
         return (
-          <span className="rounded-md bg-indigo-100 px-1.5 py-0.5 text-[9px] font-black text-indigo-700">
-            🛡️ Admin
+          <span className="inline-flex items-center gap-1 rounded-md bg-indigo-100 px-1.5 py-0.5 text-[10px] font-black text-indigo-700">
+            <Shield className="h-3 w-3 text-indigo-700" />
+            Admin
           </span>
         );
       default:
         return (
-          <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
+          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
+            <User className="h-3 w-3 text-slate-500" />
             Member
           </span>
         );
@@ -213,47 +212,43 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
   const typingNames = Object.values(typingUsers);
 
   return (
-    <div className="flex flex-col h-[640px] rounded-2xl border border-slate-200/90 bg-white shadow-sm overflow-hidden">
+    <div className="flex flex-col h-[660px] rounded-3xl border border-slate-200 bg-white shadow-xs overflow-hidden">
       {/* Chat Header */}
-      <div className="flex items-center justify-between border-b border-slate-200/80 bg-slate-50/80 px-5 py-3.5 backdrop-blur-xs">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 to-cyan-500 text-white shadow-xs">
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
+      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-6 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-xs">
+            <MessageSquare className="h-5 w-5" />
           </div>
           <div>
-            <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-              Team Real-time Chat
+            <h3 className="text-sm font-black text-slate-900">
+              Team Real-Time Room
             </h3>
-            <p className="text-[11px] text-slate-500">
-              Live communication room for team collaborators
-            </p>
+            <p className="text-xs text-slate-500">Live chat synced with database history</p>
           </div>
         </div>
 
-        {/* Real-time Status Badge */}
-        <div className="flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 shadow-2xs">
+        <div className="flex items-center gap-2 rounded-xl bg-white border border-slate-200 px-3 py-1.5 shadow-2xs">
           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span>{isConnected ? 'Real-time Live' : 'Connecting...'}</span>
+          <span className="text-xs font-bold text-emerald-700">Online & Live</span>
         </div>
       </div>
 
-      {/* Messages Feed */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-gradient-to-b from-slate-50/40 to-white">
-        {loading ? (
-          <div className="flex h-full items-center justify-center text-xs text-slate-400">
-            Loading team chat history...
+      {/* Messages Scroll Area */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/30">
+        {loading && messages.length === 0 ? (
+          <div className="flex h-full items-center justify-center">
+            <div className="flex flex-col items-center gap-2">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+              <p className="text-xs text-slate-400">Loading chat history...</p>
+            </div>
           </div>
         ) : messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center p-8">
-            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-500">
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
+            <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+              <MessageSquare className="h-7 w-7" />
             </div>
-            <p className="text-sm font-bold text-slate-700">No messages yet</p>
-            <p className="mt-1 text-xs text-slate-400 max-w-xs">
+            <p className="text-base font-bold text-slate-800">No messages yet</p>
+            <p className="mt-1 text-xs text-slate-400 max-w-sm">
               Be the first to say hello to your team members in this real-time channel!
             </p>
           </div>
@@ -265,13 +260,13 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
             return (
               <div
                 key={msg.id}
-                className={`flex items-start gap-2.5 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}
+                className={`flex items-start gap-3 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}
               >
                 {/* Avatar */}
                 <div
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-black shadow-xs ${
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-black shadow-xs ${
                     isMe
-                      ? 'bg-gradient-to-tr from-indigo-600 to-cyan-500 text-white'
+                      ? 'bg-indigo-600 text-white'
                       : 'bg-slate-200 text-slate-700'
                   }`}
                   title={`${msg.sender?.name} (${senderRole})`}
@@ -282,34 +277,34 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
                 {/* Message Bubble Container */}
                 <div className={`flex flex-col max-w-[75%] ${isMe ? 'items-end' : 'items-start'}`}>
                   {/* Sender meta */}
-                  <div className="mb-1 flex items-center gap-1.5 px-1">
-                    <span className="text-[11px] font-bold text-slate-700">
+                  <div className="mb-1 flex items-center gap-2 px-1">
+                    <span className="text-xs font-bold text-slate-800">
                       {isMe ? 'You' : msg.sender?.name}
                     </span>
                     {getRoleBadge(senderRole)}
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[11px] text-slate-400">
                       {formatMessageTime(msg.createdAt)}
                     </span>
                   </div>
 
                   {/* Bubble */}
                   <div
-                    className={`rounded-2xl px-4 py-2.5 text-xs shadow-xs break-words leading-relaxed ${
+                    className={`rounded-2xl px-4 py-3 text-sm shadow-xs break-words leading-relaxed ${
                       isMe
                         ? 'bg-indigo-600 text-white rounded-tr-none'
-                        : 'bg-white text-slate-800 border border-slate-200/90 rounded-tl-none'
+                        : 'bg-white text-slate-800 border border-slate-200 rounded-tl-none'
                     }`}
                   >
                     <p className="whitespace-pre-wrap">{msg.content}</p>
 
                     {/* Image Attachment (Bonus feature) */}
                     {msg.fileUrl && (
-                      <div className="mt-2 overflow-hidden rounded-xl border border-white/20">
+                      <div className="mt-2.5 overflow-hidden rounded-xl border border-white/20">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={msg.fileUrl}
                           alt="Attachment"
-                          className="max-h-48 max-w-full rounded-lg object-cover"
+                          className="max-h-56 max-w-full rounded-lg object-cover"
                           loading="lazy"
                         />
                       </div>
@@ -325,8 +320,8 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
 
       {/* Typing Indicator Bar */}
       {typingNames.length > 0 && (
-        <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/60 px-5 py-1.5 text-[11px] text-slate-500 italic animate-pulse">
-          <span className="flex gap-0.5">
+        <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50 px-6 py-2 text-xs text-slate-500 italic animate-pulse">
+          <span className="flex gap-1">
             <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-bounce" />
             <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-bounce [animation-delay:0.2s]" />
             <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-bounce [animation-delay:0.4s]" />
@@ -339,22 +334,27 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
 
       {/* Attachment Preview / Input (Bonus) */}
       {showAttachmentInput && (
-        <div className="border-t border-slate-200 bg-slate-50 p-3">
+        <div className="border-t border-slate-200 bg-slate-50 p-4">
           <div className="flex items-center gap-2">
-            <input
-              type="url"
-              placeholder="Paste image URL (e.g. https://images.unsplash.com/...)"
-              value={attachmentUrl}
-              onChange={(e) => setAttachmentUrl(e.target.value)}
-              className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-            />
+            <div className="relative flex-1">
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                <ImageIcon className="h-4 w-4" />
+              </div>
+              <input
+                type="url"
+                placeholder="Paste image URL (e.g. https://images.unsplash.com/...)"
+                value={attachmentUrl}
+                onChange={(e) => setAttachmentUrl(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-10 pr-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium"
+              />
+            </div>
             <button
               type="button"
               onClick={() => {
                 setAttachmentUrl('');
                 setShowAttachmentInput(false);
               }}
-              className="text-xs text-slate-500 hover:text-slate-800 px-2 py-1"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
             >
               Cancel
             </button>
@@ -362,45 +362,42 @@ export default function TeamChat({ teamId, currentUser, teamMembers }: TeamChatP
         </div>
       )}
 
-      {/* Message Input Box */}
+      {/* Message Input Box - Wide & Clear */}
       <form
         onSubmit={handleSendMessage}
-        className="flex items-center gap-2 border-t border-slate-200/80 bg-white p-3.5"
+        className="flex items-center gap-3 border-t border-slate-200 bg-white p-4"
       >
         {/* Attachment Toggle Button */}
         <button
           type="button"
           onClick={() => setShowAttachmentInput(!showAttachmentInput)}
-          className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-colors cursor-pointer ${
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors cursor-pointer ${
             showAttachmentInput || attachmentUrl
-              ? 'border-indigo-300 bg-indigo-50 text-indigo-600'
+              ? 'border-indigo-400 bg-indigo-50 text-indigo-600'
               : 'border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700'
           }`}
           title="Attach image link"
         >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-          </svg>
+          <Paperclip className="h-5 w-5" />
         </button>
 
+        {/* Text Input */}
         <input
           type="text"
-          placeholder="Type a message to your team (press Enter to send)..."
           value={inputText}
           onChange={handleInputChange}
-          disabled={sending}
-          className="flex-1 rounded-xl border border-slate-200/90 bg-slate-50/60 px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
+          placeholder="Type a team message in real-time..."
+          className="flex-1 rounded-2xl border border-slate-200 bg-slate-50/60 px-5 py-3 text-sm text-slate-900 placeholder-slate-400 transition-all focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 font-medium"
         />
 
+        {/* Send Button */}
         <button
           type="submit"
           disabled={sending || (!inputText.trim() && !attachmentUrl)}
-          className="flex h-10 items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-4 text-xs font-bold text-white shadow-xs hover:from-indigo-700 hover:to-cyan-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 transition-all active:scale-95 disabled:opacity-40 cursor-pointer"
+          title="Send message"
         >
-          <span>Send</span>
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-          </svg>
+          <Send className="h-5 w-5" />
         </button>
       </form>
     </div>
